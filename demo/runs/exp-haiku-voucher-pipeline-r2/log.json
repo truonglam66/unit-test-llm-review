@@ -1,0 +1,263 @@
+{
+ "source": "src/voucher.ts",
+ "model": "haiku",
+ "rounds": [
+  {
+   "round": 1,
+   "jest_pass": true,
+   "mutation_score": 100.0,
+   "killed": 18,
+   "survived": 0,
+   "mutants": 18,
+   "tests": 26,
+   "rubric_pass": 3,
+   "verdict": "needs_work",
+   "cost_usd": 0.0231,
+   "seconds": 192.8
+  }
+ ],
+ "mode": "pipeline",
+ "behaviors": [
+  {
+   "name": "K1 - total âm: throw INVALID_TOTAL",
+   "condition": "total < 0. Kiểm tra này chạy trước kiểm tra hạn nên kết quả không phụ thuộc now, kể cả khi voucher đã hết hạn.",
+   "expected": "throw Error('INVALID_TOTAL')",
+   "boundary_values": [
+    "total = -0.01 (sát dưới 0, cạnh total = 0 với K2/K3)"
+   ]
+  },
+  {
+   "name": "K2 - voucher hết hạn: trả nguyên total",
+   "condition": "total >= 0 và now.getTime() >= expiresAt.getTime(). So sánh bằng cũng tính là hết hạn. Nhánh này trả về trước khi xét minOrder, percent, maxDiscount.",
+   "expected": "return total (không giảm giá)",
+   "boundary_values": [
+    "total = 0, now = expiresAt + 1ms (cạnh total = 0 với K1)",
+    "now = expiresAt đúng bằng, total = 100000 (cạnh hết hạn với K3/K4/K5)"
+   ]
+  },
+  {
+   "name": "K3 - còn hạn nhưng total < minOrder: trả nguyên total",
+   "condition": "total >= 0, now < expiresAt, total < minOrder. Giả định minOrder > 0 (nếu minOrder = 0 thì total = 0 thuộc K4).",
+   "expected": "return total (không giảm giá)",
+   "boundary_values": [
+    "total = 0 với minOrder = 200000 (cạnh total = 0 với K1)",
+    "total = 199999.99 (= minOrder - 0.01, cạnh minOrder với K4)",
+    "now = expiresAt - 1ms, total = 100000 (cạnh hết hạn với K2)"
+   ]
+  },
+  {
+   "name": "K4 - đủ điều kiện, chưa chạm trần: giảm theo percent",
+   "condition": "now < expiresAt, total >= minOrder, total * percent / 100 < maxDiscount. Ví dụ percent = 10, maxDiscount = 50000, minOrder = 200000.",
+   "expected": "return total - total*percent/100. Kết quả là số thực nên dùng toBeCloseTo.",
+   "boundary_values": [
+    "total = 200000 (= minOrder, thuộc K4, cạnh minOrder với K3)",
+    "now = expiresAt - 1ms, total = 300000 (cạnh hết hạn với K2)",
+    "total = 499999.99 (discount = 49999.999 < 50000, cạnh trần với K5)"
+   ]
+  },
+  {
+   "name": "K5 - đủ điều kiện, chạm trần: giảm đúng maxDiscount",
+   "condition": "now < expiresAt, total >= minOrder, total * percent /100 >= maxDiscount. Với cấu hình ví dụ ở K4, minOrder * percent / 100 = 20000 < maxDiscount nên K5 không chạm cạnh minOrder.",
+   "expected": "return total - maxDiscount. Tại đúng biên, Math.min trả cùng giá trị ở cả hai phía, nên test biên này kiểm tra độ chính xác của công thức chứ không kiểm tra việc chọn nhánh.",
+   "boundary_values": [
+    "total = 500000 (discount đúng 50000 = maxDiscount, cạnh trần với K4). Kỳ vọng 450000.",
+    "now = expiresAt - 1ms, total = 1000000 (cạnh hết hạn với K2). Kỳ vọng 950000."
+   ]
+  },
+  {
+   "name": "T - phụ thuộc thời gian: không truyền now",
+   "condition": "Gọi applyVoucher(total, voucher) không truyền now. Default parameter now = new Date() được tính tại thời điểm gọi. Mã nguồn không có nguồn ngẫu nhiên nào khác.",
+   "expected": "Hành vi giống K2-K5 theo đồng hồ hệ thống. Test phải mock thời gian (jest.useFakeTimers + setSystemTime hoặc tương đương), nếu không sẽ flaky.",
+   "boundary_values": [
+    "system time = expiresAt đúng bằng (kỳ vọng: hết hạn, trả nguyên total)"
+   ]
+  },
+  {
+   "name": "P1 - percent > 100 (ngoài miền 1..100, không có guard)",
+   "condition": "percent > 100, voucher còn hạn, total >= minOrder. Doc nói percent 1..100 nhưng code không kiểm tra.",
+   "expected": "Không throw. Kết quả có thể âm vì discount không bị chặn bởi total. Ví dụ total = 100, percent = 200, maxDiscount = 1000 cho discount = 200 và kết quả -100. Cần quyết định spec hoặc thêm guard.",
+   "boundary_values": [
+    "percent = 101 (cạnh percent = 100 của miền hợp lệ)"
+   ]
+  },
+  {
+   "name": "P0 - percent < 1 (0 hoặc âm, ngoài miền)",
+   "condition": "percent < 1, voucher còn hạn, total >= minOrder",
+   "expected": "percent = 0 cho discount = 0, trả về total. Percent âm làm discount âm và tổng tiền tăng. Không có guard.",
+   "boundary_values": [
+    "percent = 0 (cạnh percent = 1 của miền hợp lệ)"
+   ]
+  },
+  {
+   "name": "M - maxDiscount < 0 (ngoài miền, không có guard)",
+   "condition": "maxDiscount < 0, voucher còn hạn, total >= minOrder",
+   "expected": "discount = min(x, maxDiscount) âm, nên total - discount lớn hơn total. Không throw, không có guard.",
+   "boundary_values": [
+    "maxDiscount = -1 (cạnh maxDiscount = 0)"
+   ]
+  }
+ ],
+ "stop_reason": "threshold",
+ "final_review": {
+  "derived_behaviors": [
+   {
+    "behavior": "total < 0 thì throw INVALID_TOTAL",
+    "boundary_values": [
+     "-0.01 (còn hạn)",
+     "0 (không throw)"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "Kiểm tra total < 0 trước kiểm tra hết hạn",
+    "boundary_values": [
+     "-0.01 khi đã hết hạn (expiresAt+1ms)"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "Hết hạn khi now >= expiresAt thì trả nguyên total",
+    "boundary_values": [
+     "expiresAt-1ms (còn hạn)",
+     "expiresAt (chỉ kiểm chứng đúng với total đủ minOrder ở T 'đồng hồ đúng bằng expiresAt'; K2 'now đúng bằng expiresAt' dùng total 100000 < minOrder nên không phân biệt được)",
+     "expiresAt+1ms"
+    ],
+    "covered": "partial"
+   },
+   {
+    "behavior": "Còn hạn nhưng total < minOrder thì trả nguyên total",
+    "boundary_values": [
+     "minOrder-0.01 = 199999.99",
+     "minOrder = 200000 (chuyển sang nhánh giảm giá)",
+     "0"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "Đủ điều kiện, chưa chạm trần: discount = total*percent/100",
+    "boundary_values": [
+     "total = minOrder (200000)",
+     "total = 499999.99 (số thập phân, toBeCloseTo)",
+     "percent = 1 (cận dưới miền)",
+     "percent = 100 (cận trên miền)"
+    ],
+    "covered": "partial"
+   },
+   {
+    "behavior": "Chạm trần: discount >= maxDiscount thì chỉ giảm maxDiscount",
+    "boundary_values": [
+     "total = 500000 (discount == cap; kết quả giống cả khi không có cap nên không chứng minh được điểm bắt đầu cap)",
+     "total = 500000.01 (ngay sau ranh giới cap, CHƯA có)",
+     "total = 600000",
+     "total = 1000000"
+    ],
+    "covered": "partial"
+   },
+   {
+    "behavior": "Tham số now mặc định = new Date() (dùng đồng hồ hệ thống)",
+    "boundary_values": [
+     "đồng hồ trước expiresAt",
+     "đồng hồ đúng bằng expiresAt"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "Ngoài miền percent (<1 hoặc >100): không có guard, trả kết quả âm/tăng tiền",
+    "boundary_values": [
+     "0",
+     "-10",
+     "101",
+     "200"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "maxDiscount <= 0 (ngoài miền, không guard)",
+    "boundary_values": [
+     "0",
+     "-1"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "Đủ điều kiện với minOrder = 0 và total = 0 thì trả 0",
+    "boundary_values": [
+     "minOrder = 0",
+     "total = 0"
+    ],
+    "covered": "no"
+   },
+   {
+    "behavior": "Percent lẻ / làm tròn số thập phân ở nhánh giảm giá",
+    "boundary_values": [
+     "percent lẻ (vd 2.5)",
+     "discount có phần thập phân dài"
+    ],
+    "covered": "partial"
+   },
+   {
+    "behavior": "Đầu vào NaN / Infinity (source không có guard, ngoài spec)",
+    "boundary_values": [
+     "NaN",
+     "Infinity"
+    ],
+    "covered": "no"
+   }
+  ],
+  "criteria": [
+   {
+    "id": "test_vs_implementation",
+    "status": "pass",
+    "evidence": "Toàn bộ assertion là giá trị trả về (toBe/toBeCloseTo) hoặc toThrow. Không có spy, mock, hay đếm số lần gọi. Chỉ dùng jest.useFakeTimers/setSystemTime để giả lập đồng hồ, đây là đầu vào công khai. Refactor nội bộ (ví dụ đổi thứ tự tính discount) không làm test fail.",
+    "suggestion": "Không cần sửa.",
+    "confidence": "high"
+   },
+   {
+    "id": "equivalence_boundary",
+    "status": "warn",
+    "evidence": "Điểm tốt: có ranh giới minOrder (199999.99 / 200000), expiry (-1ms / 0 / +1ms), cap (499999.99 / 500000 / 600000 / 1000000). Thiếu: (1) không có total = 500000.01 nên chưa khóa điểm bắt đầu cap; (2) percent = 1 và 100 chưa được test; (3) minOrder = 0 và total = 0 đủ điều kiện chưa test; (4) 'total = 0 không throw' nằm trong describe 'K1 - total âm: throw INVALID_TOTAL' nên nhóm bị lệch; (5) 'total = 0 không throw...' (K1), 'total = 0 với minOrder = 200000' (K3) trùng input và expected với nhau, cùng nhánh minOrder, nên lặp lại. (6) Các test P0/P1/M ghim hành vi ngoài miền (ví dụ percent=-10 cho ra 330000, percent=101 cho ra -1). Đây là hành vi nhiều khả năng là bug, và test đang coi đó là đúng. Nếu sau này thêm guard thì các test này sẽ fail.",
+    "suggestion": "Thêm: applyVoucher(500000.01, makeVoucher(), beforeExpiry()) -> 450000.01 (toBeCloseTo); percent=1 và percent=100 trong miền; {minOrder:0} với total=0 -> 0. Xóa test trùng hoặc gộp vào một nhóm. Tách P0/P1/M thành nhóm 'out-of-contract (characterization)' có comment ghi rõ đây là hành vi hiện tại chưa được spec, hoặc đổi sang expect throw khi thêm guard. Đổi tên nhóm K1 hoặc chuyển test total=0 sang nhóm không throw.",
+    "confidence": "medium"
+   },
+   {
+    "id": "assertion_strength",
+    "status": "warn",
+    "evidence": "(1) Test 'now đúng bằng expiresAt (so sánh bằng tính là hết hạn)' dùng total=100000 < minOrder=200000. Nhánh minOrder cũng trả total, nên nếu đổi >= thành > ở điều kiện hết hạn thì test vẫn pass. Mutant này chỉ bị bắt bởi T 'đồng hồ đúng bằng expiresAt' (total=300000). (2) 'total = 0 đã hết hạn 1ms thì trả về 0', 'total = 0 không throw...' và 'total = 0 với minOrder = 200000' chỉ assert 0, và 0 cũng là total, nên không phân biệt được 'trả total' với 'trả 0' ở các nhánh này. (3) 'total = 500000 (discount đúng bằng maxDiscount)' cho cùng kết quả dù có cap hay không, nên không chứng minh được cap. (4) toThrow('INVALID_TOTAL') là so khớp chuỗi con, đủ dùng nhưng lỏng.",
+    "suggestion": "K2 'đúng bằng expiresAt' đổi total thành 300000 (đủ minOrder) để tự bắt được mutant >= -> >. Các test total=0 nên dùng total có giá trị khác 0 cho nhánh hết hạn/minOrder (ví dụ 300000 hết hạn -> 300000, 100000 < minOrder -> 100000), giữ 0 chỉ cho test không throw. Thêm test cận cap 500000.01. Dùng toThrow(/^INVALID_TOTAL$/) nếu muốn khớp chính xác.",
+    "confidence": "high"
+   },
+   {
+    "id": "isolation",
+    "status": "pass",
+    "evidence": "makeVoucher() tạo object mới mỗi lần; các Date được tạo mới trong từng test. Không có biến module-level bị mutate (hằng số chỉ là string). Nhóm T dùng beforeEach/afterEach để bật/tắt fake timers. Các test còn lại truyền now tường minh nên không phụ thuộc đồng hồ hay thứ tự chạy.",
+    "suggestion": "Không cần sửa. Có thể chạy it.only ngẫu nhiên để xác nhận lại.",
+    "confidence": "high"
+   },
+   {
+    "id": "determinism",
+    "status": "pass",
+    "evidence": "Mọi mốc thời gian là hằng số ISO cố định (EXPIRES_AT_ISO, BEFORE_EXPIRY_ISO). Các test không truyền now chỉ nằm trong describe 'T' và có setSystemTime cố định. Không có Math.random, không có async. Không có time bomb vì không so với ngày hiện tại.",
+    "suggestion": "Không cần sửa.",
+    "confidence": "high"
+   },
+   {
+    "id": "naming_clarity",
+    "status": "warn",
+    "evidence": "Đa số tên mô tả rõ input và kỳ vọng. Các vấn đề: 'K1 - total âm: throw INVALID_TOTAL' chứa test không throw; 'total = 0 đã hết hạn 1ms thì trả về 0' không nói rõ nguyên tắc (trả total); mã 'P0', 'P1', 'M', 'T', 'K1'..'K5' không tự mô tả, người đọc phải tra mã; tên 'P0 - percent < 1 (ngoài miền, không có guard)' và 'P1' ghim hành vi lỗi mà tên không cảnh báo.",
+    "suggestion": "Đặt tên nhóm theo hành vi thay vì mã: ví dụ 'hết hạn: trả nguyên total', 'ngoài miền percent (không có guard, ghi nhận hành vi hiện tại)'. Tên test nên có kỳ vọng và nguyên tắc: 'total=0 hết hạn -> trả total (0)'.",
+    "confidence": "high"
+   },
+   {
+    "id": "fake_pass_risk",
+    "status": "warn",
+    "evidence": "Mutation đã thử (suy luận từ test hiện có): đổi '<' minOrder thành '<=' -> bị K4 'total = 200000' bắt. Bỏ kiểm tra minOrder -> bị K3 bắt. Đổi Math.min thành Math.max -> bị K4/K5 bắt. Bỏ cap -> bị K5 'total = 600000' bắt. Đổi total<0 thành total<=0 -> bị K1 'total = 0 không throw' bắt. Đổi thứ tự kiểm tra hạn và total<0 -> bị K1 'đã hết hạn vẫn throw' bắt. Đổi percent/100 thành percent/10 -> bị K4 bắt. Dùng Math.round cho discount -> bị K4 '499999.99' bắt. Bỏ tham số now, dùng đồng hồ hệ thống -> bị T 'now truyền vào được ưu tiên' bắt. Mutant sống sót: đổi '>=' thành '>' ở điều kiện hết hạn chỉ bị bắt bởi T 'đồng hồ đúng bằng expiresAt'. Test K2 có tên đúng ý nhưng không bắt được mutant này. Mutant trả 0 thay vì total ở nhánh minOrder sẽ bị K3 '199999.99' bắt, nên không sống sót.",
+    "suggestion": "Làm K2 'đúng bằng expiresAt' dùng total đủ minOrder để bắt trực tiếp mutant >= -> >. Thêm test cận cap 500000.01 để bắt mutant làm cap sai điểm bắt đầu (ví dụ dùng > thay vì >= kèm một kiểu khác). Thêm percent=1, percent=100 và minOrder=0 để bắt mutant hardcode percent hoặc minOrder ngoài các test P.",
+    "confidence": "medium"
+   }
+  ],
+  "overall_verdict": "needs_work",
+  "summary": "Bộ test khá tốt về mặt cách tiếp cận: assert trên kết quả công khai, dữ liệu cố định, không phụ thuộc đồng hồ thật, mỗi test tự tạo input và không có state dùng chung. Hầu hết mutation phổ biến (đổi toán tử so sánh ở minOrder, bỏ cap, đổi percent/100, bỏ kiểm tra total<0) đều bị bắt. Các vấn đề cần sửa: (1) test 'now đúng bằng expiresAt' dùng total < minOrder nên không kiểm chứng được ranh giới >= ; chỉ test T ở nhóm đồng hồ bắt được; (2) thiếu ranh giới 500000.01 của cap, percent 1/100, minOrder=0 và total=0 đủ điều kiện; (3) ba test total=0 trùng nhau và chỉ assert 0 nên yếu; (4) các test P0/P1/M ghim hành vi out-of-contract (percent âm/101 cho kết quả vô lý) vào test như đúng, sẽ fail khi thêm guard; (5) tên nhóm K1 và mã P0/P1/M/T gây hiểu nhầm. Không có lỗi nghiêm trọng về isolation hay determinism."
+ },
+ "total_seconds": 192.8,
+ "total_cost_usd": 0.0231
+}

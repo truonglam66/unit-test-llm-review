@@ -1,0 +1,192 @@
+{
+ "source": "src/voucher.ts",
+ "model": "haiku",
+ "rounds": [
+  {
+   "round": 1,
+   "jest_pass": true,
+   "mutation_score": 100.0,
+   "killed": 18,
+   "survived": 0,
+   "mutants": 18,
+   "tests": 16,
+   "rubric_pass": 5,
+   "verdict": "good",
+   "cost_usd": 0.0088,
+   "seconds": 74.9
+  }
+ ],
+ "mode": "naive",
+ "stop_reason": "single_shot",
+ "final_review": {
+  "derived_behaviors": [
+   {
+    "behavior": "total < 0 ném lỗi INVALID_TOTAL (kiểm tra đầu tiên, trước expiry và minOrder)",
+    "boundary_values": [
+     "-1 (ném lỗi)",
+     "0 (hợp lệ, không ném)"
+    ],
+    "covered": "partial"
+   },
+   {
+    "behavior": "Expiry: now < expiresAt thì áp dụng voucher",
+    "boundary_values": [
+     "expiresAt - 1ms (áp dụng)"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "Expiry: now == expiresAt thì giữ nguyên total (so sánh >=)",
+    "boundary_values": [
+     "now == expiresAt"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "Expiry: now > expiresAt thì giữ nguyên total",
+    "boundary_values": [
+     "now = 2026-06-01 > expiresAt = 2026-01-01",
+     "expiresAt + 1ms (không test riêng, tương đương nhánh >)"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "minOrder: total < minOrder thì giữ nguyên",
+    "boundary_values": [
+     "minOrder - 1 = 199_999"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "minOrder: total == minOrder thì áp dụng (so sánh <)",
+    "boundary_values": [
+     "minOrder = 200_000"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "Giảm theo percent khi discount nhỏ hơn maxDiscount",
+    "boundary_values": [
+     "300_000 * 10% = 30_000 < 100_000"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "Giới hạn discount bằng maxDiscount khi percent*total vượt cap",
+    "boundary_values": [
+     "2_000_000 * 10% = 200_000 > cap",
+     "1_000_000 * 10% = 100_000 == cap"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "percent = 0 và percent = 100 (cận biên của miền 0..100)",
+    "boundary_values": [
+     "percent 0",
+     "percent 100 có cap và không cap"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "total = 0 với minOrder > 0 (không đủ điều kiện, giữ nguyên 0)",
+    "boundary_values": [
+     "total 0, minOrder 200_000"
+    ],
+    "covered": "no"
+   },
+   {
+    "behavior": "Kết quả thập phân khi percent*total không chia hết",
+    "boundary_values": [
+     "1001 -> 900.9"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "Tham số now mặc định = thời điểm hiện tại (fake timer)",
+    "boundary_values": [
+     "đã hết hạn",
+     "còn hạn",
+     "now mặc định đúng tại expiresAt (không có)"
+    ],
+    "covered": "partial"
+   },
+   {
+    "behavior": "Thứ tự kiểm tra: total âm trên voucher đã hết hạn vẫn phải ném lỗi (validation trước expiry)",
+    "boundary_values": [
+     "total = -1 với expiresAt đã qua"
+    ],
+    "covered": "no"
+   },
+   {
+    "behavior": "maxDiscount = 0 (cap bằng 0 thì không giảm)",
+    "boundary_values": [
+     "maxDiscount 0"
+    ],
+    "covered": "no"
+   },
+   {
+    "behavior": "percent > 100 hoặc percent < 0 (source ghi chú 1..100 nhưng không validate)",
+    "boundary_values": [
+     "percent 101",
+     "percent -1"
+    ],
+    "covered": "no"
+   }
+  ],
+  "criteria": [
+   {
+    "id": "test_vs_implementation",
+    "status": "pass",
+    "evidence": "Mọi test assert giá trị trả về của applyVoucher (toBe(...), toThrow(...)) tại public boundary. Không có spy, không đếm số lần gọi, không assert vào nội bộ. Nhóm 'tham số now mặc định' dùng jest.setSystemTime để điều khiển đầu vào, vẫn quan sát kết quả trả về. Refactor (ví dụ đổi thứ tự if hoặc viết lại bằng Math.max/Math.min tương đương) không làm test fail.",
+    "suggestion": "Giữ nguyên. Không cần thay đổi.",
+    "confidence": "high"
+   },
+   {
+    "id": "equivalence_boundary",
+    "status": "warn",
+    "evidence": "Các nhánh chính đã có cặp biên: expiry (expiresAt-1ms, ==, >), minOrder (199_999, 200_000), cap (200_000 > 100_000, 100_000 == 100_000). Thiếu: (1) 'total < 0' trên voucher đã hết hạn, test 'ném lỗi INVALID_TOTAL khi total âm' chỉ dùng makeVoucher() còn hạn nên không chứng minh validation chạy trước expiry; (2) maxDiscount = 0 không có test; (3) total = 0 với minOrder > 0 không có test; (4) percent ngoài 1..100 không có test, dù comment ghi rõ miền 1..100 (phụ thuộc domain: source không validate nên có thể là ngoài phạm vi).",
+    "suggestion": "Thêm: it('ném lỗi INVALID_TOTAL ngay cả khi voucher đã hết hạn', ...) với expiresAt: new Date('2026-01-01') và total -1; it('không giảm khi maxDiscount = 0') với makeVoucher({ maxDiscount: 0 }) expect 500_000 -> 500_000; it('giữ nguyên total = 0 khi minOrder > 0'). Với percent ngoài 1..100 cần quyết định spec (throw hay giữ nguyên) trước khi viết test.",
+    "confidence": "medium"
+   },
+   {
+    "id": "assertion_strength",
+    "status": "pass",
+    "evidence": "Assert dùng giá trị số chính xác (toBe(450_000), toBe(900_000), toBe(1_900_000)), không dùng toBeDefined/toBeTruthy. Mutation thủ công đã kiểm: '<' thành '<=' ở minOrder bị bắt bởi test 200_000 (trả 200_000 thay vì 180_000); '>=' thành '>' ở expiry bị bắt bởi test biên bằng nhau; Math.min thành Math.max bị bắt bởi test 2_000_000 (1_800_000 ≠ 1_900_000); total - discount thành total + discount bị bắt; '/100' thành '/10' bị bắt; Math.floor/Math.round lên kết quả 900.9 bị bắt bởi toBeCloseTo(900.9, 5); 'total < 0' thành 'total <= 0' bị bắt bởi test total = 0 minOrder = 0; bỏ throw bị bắt bởi toThrow.",
+    "suggestion": "Giữ nguyên. Có thể đổi toBeCloseTo(900.9, 5) thành toBe(900.9) không cần thiết vì 1001 - 100.1 trong JS là số đúng cần kiểm tra; giữ toBeCloseTo là hợp lý.",
+    "confidence": "high"
+   },
+   {
+    "id": "isolation",
+    "status": "pass",
+    "evidence": "makeVoucher() trả về object mới mỗi lần gọi, mỗi test tự tạo input. NOW là const Date không bị mutate. describe 'tham số now mặc định' có beforeEach(jest.useFakeTimers) và afterEach(jest.useRealTimers), nên không rò rỉ fake timer sang test khác. Các test không phụ thuộc thứ tự chạy.",
+    "suggestion": "Giữ nguyên. Có thể chạy it.only từng test để xác nhận thêm, nhưng dựa trên code thì không có state chia sẻ.",
+    "confidence": "high"
+   },
+   {
+    "id": "determinism",
+    "status": "pass",
+    "evidence": "Mọi test truyền now tường minh (NOW hoặc new Date(voucher.expiresAt)) nên không đọc đồng hồ thật. Hai test default now dùng jest.setSystemTime cố định 2026-06-01. Không có Math.random. Không có async. Không có ngày so sánh với thời điểm chạy thực tế.",
+    "suggestion": "Giữ nguyên. Lưu ý: nếu sau này bỏ tham số now ở một test, test đó sẽ phụ thuộc đồng hồ thật, cần luôn dùng fake timer.",
+    "confidence": "high"
+   },
+   {
+    "id": "naming_clarity",
+    "status": "pass",
+    "evidence": "Tên mô tả đúng hành vi cụ thể, ví dụ 'giữ nguyên total đúng tại thời điểm expiresAt (biên bằng nhau)', 'giới hạn mức giảm ở maxDiscount khi percent vượt quá', 'dùng thời gian hiện tại khi không truyền now: voucher đã hết hạn'. Điểm yếu nhỏ: 'xử lý kết quả thập phân chính xác' thực chất chỉ kiểm tra một giá trị 900.9 bằng toBeCloseTo, tên hơi rộng hơn nội dung.",
+    "suggestion": "Đổi thành 'tính đúng mức giảm khi kết quả là số thập phân (1001 -> 900.9)' cho sát nội dung.",
+    "confidence": "medium"
+   },
+   {
+    "id": "fake_pass_risk",
+    "status": "warn",
+    "evidence": "Các mutation sau vẫn pass với suite hiện tại: (1) Chuyển check 'total < 0' xuống sau check expiry: applyVoucher(-1, voucherHetHan) trả -1 thay vì ném lỗi, không test nào bắt vì test -1 dùng makeVoucher() còn hạn; (2) Thêm 'if (voucher.maxDiscount === 0) return total': không test nào bắt vì không có case maxDiscount 0; (3) Đổi 'total < minOrder' thành 'total < minOrder && total > 0': không bắt vì không có case total = 0 với minOrder > 0; (4) Bỏ check expiry trong nhánh now mặc định: test 'voucher đã hết hạn' vẫn bắt được, nên không phải lỗ hổng. Phần còn lại (đổi <, <=, >=, >, min/max, chia 100, dấu trừ, làm tròn, bỏ throw, bỏ tham số now) đều bị ít nhất một test bắt.",
+    "suggestion": "Thêm 3 test: throw ưu tiên trên voucher hết hạn; maxDiscount = 0 không giảm; total = 0 với minOrder > 0 giữ nguyên 0. Sau đó chạy mutation testing (Stryker) để xác nhận.",
+    "confidence": "medium"
+   }
+  ],
+  "overall_verdict": "good",
+  "summary": "Bộ test cho applyVoucher có chất lượng tốt: assert giá trị cụ thể ở public boundary, phủ đầy đủ các biên chính (expiresAt -1ms/==/+, minOrder 199_999/200_000, cap bằng và vượt, percent 0 và 100), isolation và determinism đều sạch (fake timer được cleanup đúng, không đọc đồng hồ thật). Mutation thủ công trên các toán tử so sánh, min/max, chia, dấu trừ, làm tròn và throw đều bị bắt. Điểm cần bổ sung là một số biên chưa có test: validation ưu tiên trước expiry (total âm trên voucher hết hạn), maxDiscount = 0, total = 0 với minOrder > 0. Miền percent ngoài 1..100 cần quyết định spec trước khi test. Không có lỗi nghiêm trọng nào trong test."
+ },
+ "total_seconds": 74.9,
+ "total_cost_usd": 0.0088
+}

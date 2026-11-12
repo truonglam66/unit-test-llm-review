@@ -1,0 +1,185 @@
+{
+ "source": "src/shipping-fee.ts",
+ "model": "haiku",
+ "rounds": [
+  {
+   "round": 1,
+   "jest_pass": true,
+   "mutation_score": 94.1,
+   "killed": 32,
+   "survived": 2,
+   "mutants": 34,
+   "tests": 18,
+   "rubric_pass": 4,
+   "verdict": "needs_work",
+   "cost_usd": 0.0145,
+   "seconds": 89.1
+  }
+ ],
+ "mode": "naive",
+ "stop_reason": "single_shot",
+ "final_review": {
+  "derived_behaviors": [
+   {
+    "behavior": "Validate: weightKg <= 0 ném INVALID_INPUT",
+    "boundary_values": [
+     "0 (biên)",
+     "-1",
+     "epsilon > 0 (ví dụ 0.001) phải hợp lệ"
+    ],
+    "covered": "partial"
+   },
+   {
+    "behavior": "Validate: distanceKm < 0 ném INVALID_INPUT",
+    "boundary_values": [
+     "0 (hợp lệ)",
+     "-0.1",
+     "-epsilon"
+    ],
+    "covered": "partial"
+   },
+   {
+    "behavior": "Validate chạy trước nhánh miễn phí (đơn >= 500 nhưng input sai vẫn ném)",
+    "boundary_values": [
+     "weight 0, total 1000"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "Input NaN/Infinity (NaN <= 0 là false nên lọt qua validate)",
+    "boundary_values": [
+     "NaN",
+     "Infinity"
+    ],
+    "covered": "no"
+   },
+   {
+    "behavior": "Miễn phí khi orderTotal >= 500 (trả 0 bất kể cân/quãng đường/thành viên)",
+    "boundary_values": [
+     "499.99 (tính phí)",
+     "500 (miễn phí)",
+     "1000 (miễn phí)"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "Phí cơ bản 15",
+    "boundary_values": [
+     "weight 1, distance 5"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "Phụ phí cân nặng: chỉ khi weight > 2, +5 mỗi kg (làm tròn lên)",
+    "boundary_values": [
+     "2 (không phụ phí)",
+     "2.01 (+1 bậc)",
+     "2.5",
+     "3",
+     "3.01 (+2 bậc)",
+     "5 (+3 bậc)"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "Phụ phí quãng đường: chỉ khi distance > 10, +2/km phần vượt",
+    "boundary_values": [
+     "10 (không phụ phí)",
+     "10.5",
+     "12.25",
+     "15"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "Kết hợp cân nặng + quãng đường cộng dồn",
+    "boundary_values": [
+     "weight 5, distance 15 → 40"
+    ],
+    "covered": "partial"
+   },
+   {
+    "behavior": "Thành viên giảm 20% áp lên toàn bộ phí (base + phụ phí)",
+    "boundary_values": [
+     "base only (1,5)",
+     "có phụ phí cân (2.5,5)",
+     "có cả hai phụ phí (5,15)"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "Làm tròn 2 chữ số thập phân (round half-up)",
+    "boundary_values": [
+     "15.246 → 15.25 (làm tròn lên)",
+     "12.1968 → 12.2 (member)",
+     "15.241 → 15.24 (làm tròn xuống, chưa test)",
+     "tie .xx5 (chưa test)"
+    ],
+    "covered": "partial"
+   },
+   {
+    "behavior": "orderTotal âm hoặc 0 (source không validate, hành vi chưa xác định)",
+    "boundary_values": [
+     "0",
+     "-1"
+    ],
+    "covered": "no"
+   }
+  ],
+  "criteria": [
+   {
+    "id": "test_vs_implementation",
+    "status": "pass",
+    "evidence": "Toàn bộ test chỉ gọi calculateShippingFee (public API) và assert giá trị trả về hoặc exception. Không có spy, mock nội bộ hay đếm số lần gọi helper. Refactor nội bộ (ví dụ đổi thứ tự cộng phụ phí) không làm test fail nếu kết quả không đổi.",
+    "suggestion": "Giữ nguyên. Không cần sửa.",
+    "confidence": "high"
+   },
+   {
+    "id": "equivalence_boundary",
+    "status": "warn",
+    "evidence": "Các biên chính được phủ tốt: weight 0 và 2 và 3, distance 0 và 10, total 499.99 và 500. Thiếu: (1) weight epsilon > 0 (ví dụ 0.001) để xác nhận validate chỉ chặn <= 0; (2) distance âm sát 0 (-0.0001); (3) làm tròn: không có case x.xx5 hay case làm tròn xuống (15.241 → 15.24), nên lớp 'làm tròn xuống' không được chứng minh; (4) NaN/Infinity không có class nào; (5) orderTotal âm/0 không được test. Hầu hết case dùng total = 100 nên lớp 'dưới ngưỡng' ít được kiểm tra đa dạng.",
+    "suggestion": "Thêm case: weight 0.001 (hợp lệ), distance -0.0001 (ném), distance 10.1205 không thành viên → 15.24 (làm tròn xuống), và một case tie .xx5 nếu domain cần. Nếu quy ước NaN là không hợp lệ thì thêm it.each cho NaN và Infinity; nếu không, ghi chú hành vi chưa xác định. Confidence thấp vì phụ thuộc domain.",
+    "confidence": "low"
+   },
+   {
+    "id": "assertion_strength",
+    "status": "warn",
+    "evidence": "Đa số dùng toBe với giá trị chính xác nên mạnh. Điểm yếu: (1) 'phí 15.246 không thành viên → 15.25' (dòng distance 10.123) và 'phí 15.246 thành viên → 12.2' không phân biệt Math.round với Math.ceil: ceil(1524.6)/100 = 15.25 và ceil(1219.68)/100 = 12.2, nên mutant đổi round→ceil SỐNG SÓT. (2) toThrow('INVALID_INPUT') so khớp substring, yếu hơn một so khớp đầy đủ. Các mutant khác (đổi < thành <=, ceil→floor, *2→*3, 0.8→0.9, bỏ rounding, bỏ early return, đổi ngưỡng 10 hoặc 500) đều bị bắt.",
+    "suggestion": "Thêm case phân biệt hướng làm tròn: distance 10.1205, không thành viên → 15.24 (round cho 15.24, ceil cho 15.25). Đổi toThrow('INVALID_INPUT') thành toThrow(/^INVALID_INPUT$/) để khớp chính xác. Chạy mutation thủ công sau khi thêm case để xác nhận mutant ceil bị bắt.",
+    "confidence": "high"
+   },
+   {
+    "id": "isolation",
+    "status": "pass",
+    "evidence": "Không có beforeEach/afterEach, biến module-level hay state chia sẻ. Mỗi test tự khai báo input inline (ví dụ calculateShippingFee(1, 5, 100, false)). Hàm thuần nên đảo thứ tự hoặc chạy it.only từng test cho cùng kết quả.",
+    "suggestion": "Giữ nguyên.",
+    "confidence": "high"
+   },
+   {
+    "id": "determinism",
+    "status": "pass",
+    "evidence": "Không dùng Date.now, Math.random hay so sánh với ngày cố định. Không có async. Các giá trị float được chuẩn hóa bởi Math.round(x*100)/100 trước khi so sánh nên toBe ổn định (ví dụ 12.2, 15.25). Kết quả 16 và 32 cho nhánh member đều là số nguyên sau làm tròn.",
+    "suggestion": "Giữ nguyên.",
+    "confidence": "high"
+   },
+   {
+    "id": "naming_clarity",
+    "status": "pass",
+    "evidence": "Tên mô tả đúng hành vi: 'đúng ngưỡng 500 thì miễn phí', 'weight = 2 (biên, chưa vượt) → không phụ phí cân nặng', 'thành viên với đơn >= 500 cũng miễn phí (không ra 0.8 * phí)'. Một chỗ nhỏ: tên 'phí 15.246 không thành viên → 15.25' nêu giá trị trung gian chứ không nêu input (distance 10.123), có thể gây hiểu nhầm khi đọc.",
+    "suggestion": "Đổi tên thành 'distance 10.123 (phí thô 15.246) không thành viên → làm tròn 15.25' để nêu rõ input và kết quả.",
+    "confidence": "high"
+   },
+   {
+    "id": "fake_pass_risk",
+    "status": "warn",
+    "evidence": "Các mutant đã kiểm tra và bị bắt: weight > 2 → > 3, Math.ceil → Math.floor, distance > 10 → > 11, *2 → *3, 0.8 → 0.9, áp giảm giá trước phụ phí, Math.round → floor, bỏ rounding, weightKg <= 0 → <= 1. Mutant còn sống: Math.round → Math.ceil trong bước làm tròn (test 'phí 15.246 không thành viên → 15.25' và 'phí 15.246 thành viên → 12.2' vẫn pass). Mutant tương đương (không tính là lỗi test): weight > 2 → >= 2 và distance > 10 → >= 10 vì phụ phí bằng 0 tại biên. Ngoài ra NaN lọt qua validate mà không test nào phát hiện.",
+    "suggestion": "Thêm case làm tròn xuống (distance 10.1205 → 15.24) để diệt mutant ceil. Thêm test NaN nếu muốn khóa hành vi validate. Sau khi sửa, chạy mutation thủ công (Stryker hoặc sửa tay từng toán tử) để xác nhận không còn mutant sống ngoài nhóm tương đương.",
+    "confidence": "high"
+   }
+  ],
+  "overall_verdict": "needs_work",
+  "summary": "Bộ test khá tốt: hàm thuần, test độc lập và xác định, chỉ kiểm tra qua public API, phủ đúng các biên chính (0, 2, 3, 10, 499.99, 500) và hầu hết mutant toán tử/ngưỡng đều bị bắt. Điểm yếu cần sửa là bước làm tròn 2 chữ số: hai test làm tròn hiện không phân biệt được round với ceil (mutant Math.round→Math.ceil sống sót), chưa có case làm tròn xuống hay tie. Ngoài ra thiếu case epsilon sát 0 và input NaN (NaN lọt qua validate), và toThrow đang so khớp substring. Các lỗ hổng đều có thể khắc phục bằng vài case bổ sung."
+ },
+ "total_seconds": 89.1,
+ "total_cost_usd": 0.0145
+}

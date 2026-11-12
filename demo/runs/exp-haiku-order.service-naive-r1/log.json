@@ -1,0 +1,237 @@
+{
+ "source": "src/order.service.ts",
+ "model": "haiku",
+ "rounds": [
+  {
+   "round": 1,
+   "jest_pass": true,
+   "mutation_score": 100.0,
+   "killed": 42,
+   "survived": 0,
+   "mutants": 42,
+   "tests": 20,
+   "rubric_pass": 4,
+   "verdict": "needs_work",
+   "cost_usd": 0.0184,
+   "seconds": 133.1
+  }
+ ],
+ "mode": "naive",
+ "stop_reason": "single_shot",
+ "final_review": {
+  "derived_behaviors": [
+   {
+    "behavior": "computeTotal: danh sách rỗng trả về 0",
+    "boundary_values": [
+     "[]"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "computeTotal: dưới ngưỡng 1.000.000 không giảm giá",
+    "boundary_values": [
+     "999_999"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "computeTotal: đúng ngưỡng 1.000.000 bắt đầu giảm 10% (cạnh ranh giới khởi điểm)",
+    "boundary_values": [
+     "1_000_000"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "computeTotal: giữa ngưỡng và trần, giảm đúng 10%",
+    "boundary_values": [
+     "1_500_000"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "computeTotal: đúng điểm trần 2.000.000 (10% = 200.000)",
+    "boundary_values": [
+     "2_000_000"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "computeTotal: trên trần, mức giảm bị kẹp ở 200.000",
+    "boundary_values": [
+     "2_000_001",
+     "3_000_000"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "computeTotal: subtotal = Σ(qty*price) qua nhiều sản phẩm rồi mới áp giảm",
+    "boundary_values": [
+     "1_100_000 (3x300k + 2x100k)"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "computeTotal: kết quả thập phân khi discount không nguyên (source không quy định làm tròn)",
+    "boundary_values": [
+     "1_234_567"
+    ],
+    "covered": "partial"
+   },
+   {
+    "behavior": "placeOrder: items rỗng ném EMPTY_ORDER trước khi gọi kho",
+    "boundary_values": [
+     "[]"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "placeOrder: qty <= 0 ném INVALID_QTY trước khi giữ hàng",
+    "boundary_values": [
+     "0",
+     "-1",
+     "1 (hợp lệ, trong happy path)"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "placeOrder: reserve trả false ở sản phẩm đầu (không có gì để nhả)",
+    "boundary_values": [
+     "index 0"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "placeOrder: reserve trả false ở sản phẩm sau, nhả đúng các item đã giữ",
+    "boundary_values": [
+     "index 1 (cuối)"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "placeOrder: reserve ném exception giữa chừng, nhả các item đã giữ rồi ném lại",
+    "boundary_values": [
+     "index 1"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "placeOrder: reserve ném exception ở sản phẩm đầu (không có gì để nhả)",
+    "boundary_values": [
+     "index 0"
+    ],
+    "covered": "no"
+   },
+   {
+    "behavior": "placeOrder: happy path — charge đúng số đã giảm, save đúng payload, trả {id,total}, không nhả hàng",
+    "boundary_values": [
+     "990_000 (sau giảm)"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "placeOrder: đơn dưới ngưỡng không giảm giá khi đi qua placeOrder",
+    "boundary_values": [
+     "100"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "placeOrder: charge.ok=false ném PAYMENT_FAILED và nhả hết — nhánh ok bị cô lập",
+    "boundary_values": [
+     "{ok:false, txId:'có giá trị'} — KHÔNG có trong test"
+    ],
+    "covered": "partial"
+   },
+   {
+    "behavior": "placeOrder: charge ok=true nhưng thiếu txId → PAYMENT_FAILED",
+    "boundary_values": [
+     "txId undefined"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "placeOrder: txId là chuỗi rỗng → PAYMENT_FAILED",
+    "boundary_values": [
+     "''"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "placeOrder: charge ném exception → nhả hết và ném lại",
+    "boundary_values": [
+     "reject GATEWAY_TIMEOUT"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "placeOrder: repo.save ném exception → nhả hết và ném lại",
+    "boundary_values": [
+     "reject DB_DOWN"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "placeOrder: release() ném exception trong nhánh catch (lỗi gốc bị che / các item còn lại không được nhả)",
+    "boundary_values": [
+     "release reject"
+    ],
+    "covered": "no"
+   }
+  ],
+  "criteria": [
+   {
+    "id": "test_vs_implementation",
+    "status": "pass",
+    "evidence": "computeTotal được test qua public method, assert giá trị trả về. placeOrder được assert qua các lệnh gọi tới port (reserve/charge/save/release) — đây là hợp đồng outgoing của service được mô tả trong doc comment ('Giữ hàng -> thu tiền -> lưu đơn'), không phải chi tiết nội bộ. Các chỗ phụ thuộc thứ tự (toHaveBeenNthCalledWith trong 'giữ hàng từng sản phẩm', mockResolvedValueOnce chuỗi trong 'nhả lại hàng đã giữ khi sản phẩm sau hết hàng') bám theo thứ tự tuần tự đã được spec. Refactor sang nội bộ khác (ví dụ đổi tên biến, tách helper) không làm test fail.",
+    "suggestion": "Giữ nguyên. Có thể ghi chú trong test rằng thứ tự reserve là một phần hợp đồng, để người sau không tưởng là chi tiết cài đặt.",
+    "confidence": "medium"
+   },
+   {
+    "id": "equivalence_boundary",
+    "status": "warn",
+    "evidence": "computeTotal: đủ 2 cạnh ranh giới (ngưỡng 1.000.000 với 999_999 & 1_000_000; trần 2.000.000 với 2_000_000 & 2_000_001) và có mẫu ở giữa/trên trần. placeOrder: qty có 0, -1 và 1 (happy path). Thiếu: (a) nhánh reserve ném exception ở sản phẩm đầu tiên; (b) nhánh release() ném exception — source không định nghĩa, nhưng code 'for ... await release' sẽ bỏ dở các item còn lại và che lỗi gốc; (c) nhánh charge.ok=false khi txId có giá trị (chưa tách biệt được nhánh ok). Không có lỗi biên số nào bị thiếu cho computeTotal.",
+    "suggestion": "Thêm test: reserve.mockRejectedValueOnce(new Error('NETWORK')) với [itemA,itemB], expect release không gọi. Thêm test (nếu spec yêu cầu) cho release reject. Xem đề xuất ở assertion_strength để tách nhánh ok.",
+    "confidence": "medium"
+   },
+   {
+    "id": "assertion_strength",
+    "status": "warn",
+    "evidence": "Test 'ném PAYMENT_FAILED khi ok = false và nhả toàn bộ hàng đã giữ' dùng charge.mockResolvedValueOnce({ ok: false }) — không có txId. Vì source dùng '!charge.ok || !charge.txId', nhánh !charge.txId đã đủ để ném lỗi, nên assertion này không phân biệt được. Các assertion toThrow('X') là substring match nên yếu hơn exact match. computeTotal dùng toBeCloseTo cho 1_234_567 (tolerance 1e-6) — chấp nhận được vì source không làm tròn. Phần lớn còn lại dùng toBe/toEqual/toHaveBeenCalledWith với giá trị cụ thể, khá mạnh.",
+    "suggestion": "Đổi test ok=false thành charge.mockResolvedValueOnce({ ok: false, txId: 'TX-X' }) để chỉ nhánh ok quyết định lỗi. Cân nhắc toThrow(new Error('PAYMENT_FAILED')) hoặc regex ^PAYMENT_FAILED$ để tránh khớp substring.",
+    "confidence": "high"
+   },
+   {
+    "id": "isolation",
+    "status": "pass",
+    "evidence": "Mỗi test gọi setup() để tạo mới jest.fn và OrderService; không có state dùng chung có thể bị mutate. itemA/itemB là const module-level nhưng không bị mutate (test dùng spread {...itemB, qty}). Mọi placeOrder test đều await expect(...).rejects nên không có promise lọt.",
+    "suggestion": "Không cần sửa. Nếu muốn chắc hơn, có thể chạy jest với --randomize để xác nhận.",
+    "confidence": "high"
+   },
+   {
+    "id": "determinism",
+    "status": "pass",
+    "evidence": "Không có Date.now, Math.random, timer hay phụ thuộc ngày. Async luôn được await hoặc dùng expect(...).rejects có await. Giá trị float duy nhất (1_234_567) dùng toBeCloseTo nên không phụ thuộc chi tiết làm tròn.",
+    "suggestion": "Không cần sửa.",
+    "confidence": "high"
+   },
+   {
+    "id": "naming_clarity",
+    "status": "pass",
+    "evidence": "Tên mô tả hành vi cụ thể, ví dụ 'mức giảm bằng đúng 200.000 khi tổng 2.000.000', 'ném PAYMENT_FAILED khi txId là chuỗi rỗng', 'nhả lại hàng đã giữ khi sản phẩm sau hết hàng'. Một số tên hơi rộng: 'xử lý đúng số thập phân khi tính 10%' không nói rõ đang kiểm chứng gì (sai số làm tròn 1e-6).",
+    "suggestion": "Đổi 'xử lý đúng số thập phân khi tính 10%' thành 'giữ nguyên phần thập phân của 10% khi subtotal không chia hết' để phản ánh đúng assertion.",
+    "confidence": "high"
+   },
+   {
+    "id": "fake_pass_risk",
+    "status": "warn",
+    "evidence": "Mutation sống sót đã kiểm chứng bằng suy luận: (1) đổi 'if (!charge.ok || !charge.txId)' thành 'if (!charge.txId)' → test 'ok = false' vẫn pass vì mock không có txId. (2) Đường release() ném exception không được test: đổi catch thành 'for (const item of reserved) await this.inventory.release(...)' có thể để lỗi release che lỗi gốc mà không test nào phát hiện. Các mutation sau đều bị bắt: '>=' → '>' (test 1_000_000), 0.1 → 0.11 (1_500_000), Math.min bỏ (3_000_000), Math.min cap 199_999 (2_000_000), subtotal bỏ qty (900k/1.1M), '<= 0' → '< 0' (qty 0), reserved.push trước reserve (test OUT_OF_STOCK đầu), release(items) thay reserved (test NETWORK), bỏ if items.length===0 (test EMPTY_ORDER), bỏ txId khỏi save (happy path toHaveBeenCalledWith). Lưu ý: đây là đánh giá suy luận, chưa chạy Jest/Stryker thật.",
+    "suggestion": "Sửa test ok=false như assertion_strength. Thêm test reserve reject ở sản phẩm đầu (không release) và test release reject. Chạy Stryker để xác nhận danh sách mutation thực tế.",
+    "confidence": "high"
+   }
+  ],
+  "overall_verdict": "needs_work",
+  "summary": "Bộ test chất lượng tốt: computeTotal phủ đủ 2 cạnh ranh giới (ngưỡng 1.000.000 và trần 2.000.000) cùng nhánh trên/dưới, các nhánh validation, nhánh giữ hàng/thanh toán/lưu đơn, và kiểm tra payload chính xác; isolation và determinism đều ổn. Điểm yếu cụ thể: test 'ok = false' không có txId nên không cô lập được nhánh !charge.ok (mutation sống sót); assertion toThrow dùng substring; và chưa có test cho reserve ném exception ở sản phẩm đầu tiên cũng như khi release() tự ném lỗi. Đánh giá mutation là suy luận thủ công, chưa chạy Jest/Stryker; kết quả float 1_234_567 cũng chưa được thực thi để xác nhận."
+ },
+ "total_seconds": 133.1,
+ "total_cost_usd": 0.0184
+}

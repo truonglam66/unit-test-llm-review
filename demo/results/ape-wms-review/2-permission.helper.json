@@ -1,0 +1,115 @@
+{
+ "derived_behaviors": [
+  {
+   "behavior": "checkPermission – TENANT_MASTER dùng permissionCodes (dedupe), có code → true",
+   "boundary_values": [
+    "code có trong list",
+    "code không có",
+    "trùng lặp",
+    "permissionCodes undefined",
+    "permissionCodes []"
+   ],
+   "covered": "yes"
+  },
+  {
+   "behavior": "checkPermission – non-TENANT_MASTER gom permissionCodes từ các roles",
+   "boundary_values": [
+    "1 role",
+    "nhiều roles",
+    "role permissionCodes undefined",
+    "roles []"
+   ],
+   "covered": "yes"
+  },
+  {
+   "behavior": "checkPermission – chọn đúng nguồn theo type (TENANT_MASTER bỏ qua roles; non-master bỏ qua permissionCodes cấp store)",
+   "boundary_values": [
+    "TENANT_MASTER có roles chứa code nhưng permissionCodes không",
+    "STAFF có permissionCodes cấp store nhưng roles không"
+   ],
+   "covered": "no"
+  },
+  {
+   "behavior": "hasPermissionCode – code có '.' so khớp chính xác với rawPermissions; không '.' so khớp phần module (trước dấu chấm)",
+   "boundary_values": [
+    "'A.VIEW' có/không có",
+    "'A' khi có 'A.VIEW'",
+    "'A' khi không có",
+    "rawPermissions rỗng",
+    "tham số basePermissions truyền vào tường minh"
+   ],
+   "covered": "no"
+  },
+  {
+   "behavior": "hasRouteAccess là alias của hasPermissionCode",
+   "boundary_values": [
+    "–"
+   ],
+   "covered": "no"
+  },
+  {
+   "behavior": "hasRouteViewPermission – routeKey không có trong map → true; module chứa '.' dùng trực tiếp; module tra PERMISSION_CODES[..].VIEW; không có viewCode → true; ngược lại kiểm tra quyền",
+   "boundary_values": [
+    "routeKey không tồn tại",
+    "module có '.'",
+    "module có VIEW",
+    "module không có trong PERMISSION_CODES",
+    "user có/không có quyền VIEW"
+   ],
+   "covered": "no"
+  }
+ ],
+ "criteria": [
+  {
+   "id": "test_vs_implementation",
+   "status": "pass",
+   "evidence": "Test chỉ gọi checkPermission và assert giá trị boolean trả về; set state qua store công khai. Không spy hàm nội bộ hay đếm số lần gọi. Refactor (vd bỏ Set) không làm test fail.",
+   "suggestion": "Giữ cách tiếp cận này khi bổ sung test cho các hàm còn lại.",
+   "confidence": "high"
+  },
+  {
+   "id": "equivalence_boundary",
+   "status": "fail",
+   "evidence": "Chỉ checkPermission được test. hasPermissionCode, hasRouteAccess, hasRouteViewPermission (3 export, nhiều nhánh: code có '.' vs không, routeKey không có map, module có '.', không có viewCode) hoàn toàn không có test. Với checkPermission, không có case xác nhận chọn đúng nguồn theo type (master có roles / staff có permissionCodes cấp store).",
+   "suggestion": "Thêm test cho hasPermissionCode: ('A.VIEW', ['A.VIEW']) → true; ('A.VIEW', ['A.EDIT']) → false; ('A', ['A.VIEW']) → true; ('A', ['B.VIEW']) → false; ('A', []) → false. Thêm hasRouteViewPermission với mock NSPermissionConfig cho 4–5 nhánh. Thêm test TENANT_MASTER có roles chứa code nhưng permissionCodes rỗng → false và ngược lại cho STAFF.",
+   "confidence": "medium"
+  },
+  {
+   "id": "assertion_strength",
+   "status": "pass",
+   "evidence": "Dùng toBe(true)/toBe(false) cụ thể. Case 'handles duplicate permission codes' chỉ assert true, nên không thực sự chứng minh dedupe (kết quả giống nhau dù không dedupe).",
+   "suggestion": "Test dedupe thực chất không quan sát được qua boolean; cân nhắc đổi tên/bỏ, hoặc chấp nhận đây là smoke test. Case 'aggregates' có assert âm tốt.",
+   "confidence": "medium"
+  },
+  {
+   "id": "isolation",
+   "status": "warn",
+   "evidence": "beforeEach gọi useAccountStore.getState().reset() nên state được dọn. Tuy nhiên phụ thuộc vào việc reset() thực sự đưa roles/permissionCodes về giá trị mặc định (không thấy source store). Một số test gộp nhiều lần setState trong cùng một it ('returns false when permissionCodes is empty or undefined').",
+   "suggestion": "Tách case undefined và [] thành hai test riêng; có thể thêm afterEach reset để không rò rỉ sang file test khác.",
+   "confidence": "medium"
+  },
+  {
+   "id": "determinism",
+   "status": "pass",
+   "evidence": "Không dùng Date/Math.random/async; hàm đồng bộ thuần theo state store.",
+   "suggestion": "Không cần thay đổi.",
+   "confidence": "high"
+  },
+  {
+   "id": "naming_clarity",
+   "status": "warn",
+   "evidence": "Phần lớn tên mô tả rõ hành vi. Riêng 'handles duplicate permission codes in permissionCodes correctly', 'handles roles with undefined or empty permissionCodes gracefully' mơ hồ ('correctly', 'gracefully'); 'returns false when permissionCodes is empty or undefined' gộp hai case.",
+   "suggestion": "Đổi thành vd 'returns true when permission code appears more than once in permissionCodes', 'ignores roles whose permissionCodes is undefined and still reads other roles'.",
+   "confidence": "medium"
+  },
+  {
+   "id": "fake_pass_risk",
+   "status": "fail",
+   "evidence": "Các mutation sau vẫn pass toàn bộ test: (1) đổi `code.includes('.')` thành `!code.includes('.')` trong hasPermissionCode; (2) đổi `split('.')[0]` thành `split('.')[1]`; (3) hasRouteViewPermission `return true` khi không có module đổi thành `return false`; (4) `!viewCode ||` bỏ đi; (5) hasRouteAccess = () => false. Với checkPermission: đảo điều kiện `type === 'TENANT_MASTER'` thành `!==` sẽ bị bắt, nhưng bỏ Set dedupe thì vẫn pass; đổi nguồn sang gộp cả roles lẫn permissionCodes cho master cũng vẫn pass vì chưa có case chéo.",
+   "suggestion": "Bổ sung test cho 3 hàm chưa được cover và các case chéo nguồn quyền (master+roles, staff+permissionCodes) để bắt các mutation trên.",
+   "confidence": "high"
+  }
+ ],
+ "overall_verdict": "needs_work",
+ "summary": "Test của checkPermission khá tốt (assert ở public boundary, giá trị cụ thể, xác định, có dọn state). Nhưng file source export 4 hàm và 3 hàm (hasPermissionCode, hasRouteAccess, hasRouteViewPermission) không có test nào, dù chứa phần lớn nhánh logic. Thiếu thêm case chéo chọn nguồn quyền theo type. Rủi ro pass giả cao với các hàm chưa test, nên cần bổ sung trước khi tin vào bộ test này."
+}

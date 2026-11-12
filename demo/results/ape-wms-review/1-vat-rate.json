@@ -1,0 +1,137 @@
+{
+ "derived_behaviors": [
+  {
+   "behavior": "parseDefaultVatRate: null/undefined/chuỗi rỗng/chỉ khoảng trắng → fallback 8",
+   "boundary_values": [
+    "null",
+    "undefined",
+    "''",
+    "'   '"
+   ],
+   "covered": "partial"
+  },
+  {
+   "behavior": "parseDefaultVatRate: giá trị hợp lệ trong [0,100] → trả về số",
+   "boundary_values": [
+    "0 (min)",
+    "100 (max)",
+    "-1 (dưới min)",
+    "101 (trên max)",
+    "'8.5'"
+   ],
+   "covered": "partial"
+  },
+  {
+   "behavior": "parseDefaultVatRate: không phải số / không hữu hạn → fallback",
+   "boundary_values": [
+    "'abc'",
+    "NaN",
+    "Infinity",
+    "'Infinity'"
+   ],
+   "covered": "partial"
+  },
+  {
+   "behavior": "parseCategoryVatRate: null/undefined/rỗng → null",
+   "boundary_values": [
+    "null",
+    "undefined",
+    "''",
+    "'  '"
+   ],
+   "covered": "partial"
+  },
+  {
+   "behavior": "parseCategoryVatRate: chuỗi số hợp lệ → số (kể cả dạng PG '5.00')",
+   "boundary_values": [
+    "'0.00'",
+    "'5.00'",
+    "'100'"
+   ],
+   "covered": "partial"
+  },
+  {
+   "behavior": "parseCategoryVatRate: ngoài khoảng/không hợp lệ → null (không fallback 8)",
+   "boundary_values": [
+    "'-0.01'",
+    "'100.01'",
+    "'abc'",
+    "NaN"
+   ],
+   "covered": "no"
+  },
+  {
+   "behavior": "toVatRateFormValue: null/invalid → 'DEFAULT', hợp lệ → số (0 không bị coi là falsy nhờ ??)",
+   "boundary_values": [
+    "null",
+    "'abc'",
+    "'0'",
+    "'10.00'"
+   ],
+   "covered": "partial"
+  },
+  {
+   "behavior": "fromVatRateFormValue: undefined/'DEFAULT' → null, số → giữ nguyên",
+   "boundary_values": [
+    "undefined",
+    "'DEFAULT'",
+    "0",
+    "10"
+   ],
+   "covered": "yes"
+  }
+ ],
+ "criteria": [
+  {
+   "id": "test_vs_implementation",
+   "status": "pass",
+   "evidence": "Chỉ gọi các hàm export thuần và assert vào giá trị trả về; không spy, không mock, không phụ thuộc cấu trúc nội bộ (isValidVatRate không được test trực tiếp).",
+   "suggestion": "Giữ nguyên cách tiếp cận này.",
+   "confidence": "high"
+  },
+  {
+   "id": "equivalence_boundary",
+   "status": "fail",
+   "evidence": "Điều kiện `rate >= 0 && rate <= 100` có 2 cạnh nhưng test chỉ có '101' (cho parseDefaultVatRate); không có 100, -1, hay 0 cho cạnh dưới ở nhánh invalid. parseCategoryVatRate hoàn toàn không có case ngoài khoảng/không phải số/chuỗi rỗng (nhánh `return null` của isValidVatRate sai). Không có case chuỗi chỉ khoảng trắng dù source có `.trim()`, không có NaN/Infinity dù có Number.isFinite.",
+   "suggestion": "Dùng it.each cho cả 2 parser: 0, 100 (hợp lệ), -1, -0.01, 100.01, 101 (invalid); '   ' (whitespace), 'Infinity', NaN, null; thêm parseCategoryVatRate('abc'|'101'|'-1'|'') → null và toVatRateFormValue('abc') → 'DEFAULT'.",
+   "confidence": "medium"
+  },
+  {
+   "id": "assertion_strength",
+   "status": "warn",
+   "evidence": "Dùng toBe/toBeNull với giá trị cụ thể nên khá chắc. Nhưng test fallback dùng hằng FALLBACK_DEFAULT_VAT_RATE (circular): nếu hằng bị đổi từ 8 thành 9 thì test vẫn pass dù tên test nói 'falls back to 8'. Nhiều expect gộp trong một it nên khi fail khó biết nhánh nào hỏng.",
+   "suggestion": "Assert thẳng `.toBe(8)` ít nhất một lần (hoặc thêm test khẳng định FALLBACK_DEFAULT_VAT_RATE === 8 vì đây là hợp đồng với API); tách mỗi nhánh thành it/it.each riêng.",
+   "confidence": "high"
+  },
+  {
+   "id": "isolation",
+   "status": "pass",
+   "evidence": "Hàm thuần, không state dùng chung, không mock, không beforeEach cần dọn.",
+   "suggestion": "Không cần thay đổi.",
+   "confidence": "high"
+  },
+  {
+   "id": "determinism",
+   "status": "pass",
+   "evidence": "Không dùng Date/Math.random/async; đầu ra chỉ phụ thuộc đầu vào.",
+   "suggestion": "Không cần thay đổi.",
+   "confidence": "high"
+  },
+  {
+   "id": "naming_clarity",
+   "status": "warn",
+   "evidence": "'falls back to 8 for missing or out-of-range values' gộp nhiều nhánh (thiếu, rỗng, NaN, vượt khoảng) trong một test; 'round-trips through the form value' thực tế không test round-trip mà test từng hàm riêng lẻ; 'treats null as tenant default and numeric strings as rates' gộp 2 hành vi.",
+   "suggestion": "Tách thành các test theo hành vi: 'returns 8 when raw is empty/null/undefined', 'returns 8 when raw is above 100', 'returns null for out-of-range category rate'... Đổi tên 'round-trips' hoặc thật sự viết round-trip: fromVatRateFormValue(toVatRateFormValue('10.00')) === 10.",
+   "confidence": "high"
+  },
+  {
+   "id": "fake_pass_risk",
+   "status": "fail",
+   "evidence": "Mutation còn sống: (1) đổi `rate <= MAX_VAT_RATE` thành `< MAX` → vẫn pass (không test 100); (2) đổi `>= MIN` thành `> MIN` → test parseDefaultVatRate(0) và '0.00' sẽ fail nên bắt được, nhưng đổi `>= MIN` thành `>= -5` hoặc xoá cạnh dưới → vẫn pass (không có số âm); (3) bỏ `Number.isFinite` → vẫn pass (không test Infinity; 'Infinity' > 100 nên vẫn bị chặn bởi cạnh trên, tức check này dư với giá trị dương, nhưng NaN cần test); (4) bỏ `.trim()` → vẫn pass (không test '  '; Number('  ') = 0 nên sẽ trả 0 thay vì fallback); (5) parseCategoryVatRate luôn trả giá trị không validate (bỏ isValidVatRate) → vẫn pass vì không có case invalid; (6) đổi FALLBACK từ 8 sang giá trị khác → vẫn pass do circular; (7) toVatRateFormValue đổi `??` thành `||` → fail với '0'? không, test không có toVatRateFormValue('0') nên vẫn pass và làm mất giá trị 0%.",
+   "suggestion": "Thêm các case biên/invalid ở trên, đặc biệt: 100, '  ', -1, parseCategoryVatRate('101'), toVatRateFormValue('0.00') → 0, và assert fallback = 8 cứng.",
+   "confidence": "high"
+  }
+ ],
+ "overall_verdict": "needs_work",
+ "summary": "Test sạch về cách tiếp cận (hàm thuần, assert vào output, không flaky), nhưng độ phủ biên yếu: thiếu 100, số âm, whitespace, NaN, và gần như không test nhánh invalid của parseCategoryVatRate. Nhiều mutation (đổi <= thành <, bỏ trim, bỏ validate ở parseCategoryVatRate, đổi ?? thành ||, đổi hằng fallback) vẫn pass. Nên chuyển sang it.each theo từng nhánh, thêm biên và assert cứng giá trị 8."
+}

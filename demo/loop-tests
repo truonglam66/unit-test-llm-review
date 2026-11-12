@@ -1,0 +1,4 @@
+#!/bin/bash
+# Chạy loop_tests.py (vòng lặp review -> sửa -> đo), gọi được từ bất kỳ thư mục nào.
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+exec "$DIR/.venv/bin/python" "$DIR/loop_tests.py" "$@"

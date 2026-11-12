@@ -1,0 +1,177 @@
+{
+ "source": "src/shipping-fee.ts",
+ "model": "haiku",
+ "rounds": [
+  {
+   "round": 1,
+   "jest_pass": true,
+   "mutation_score": 94.1,
+   "killed": 32,
+   "survived": 2,
+   "mutants": 34,
+   "tests": 25,
+   "rubric_pass": 4,
+   "verdict": "good",
+   "cost_usd": 0.0115,
+   "seconds": 93.0
+  }
+ ],
+ "mode": "naive",
+ "stop_reason": "single_shot",
+ "final_review": {
+  "derived_behaviors": [
+   {
+    "behavior": "Validation: weightKg <= 0 ném INVALID_INPUT",
+    "boundary_values": [
+     "0 (ném)",
+     "-1 (ném)",
+     "0.01 (không ném, phép thử 'dương rất nhỏ')",
+     "0.001 / Number.MIN_VALUE (không được test)"
+    ],
+    "covered": "partial"
+   },
+   {
+    "behavior": "Validation: distanceKm < 0 ném INVALID_INPUT; distanceKm = 0 hợp lệ",
+    "boundary_values": [
+     "-0.5 (ném)",
+     "-0.0001 (không được test)",
+     "0 (hợp lệ nhưng chỉ kiểm tra not.toThrow, không kiểm tra giá trị 15)"
+    ],
+    "covered": "partial"
+   },
+   {
+    "behavior": "Miễn phí khi orderTotal >= 500 (bất kể thành viên)",
+    "boundary_values": [
+     "499 (phí 24)",
+     "500 (miễn phí)",
+     "800 thành viên (miễn phí)"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "Thứ tự kiểm tra: validation trước rồi mới miễn phí (input sai + đơn >= 500 vẫn phải ném lỗi)",
+    "boundary_values": [
+     "weightKg=0, orderTotal=500 (không được test)"
+    ],
+    "covered": "no"
+   },
+   {
+    "behavior": "Phí cơ bản 15 khi weight <= 2 và distance <= 10",
+    "boundary_values": [
+     "0.01",
+     "0.5",
+     "2",
+     "5",
+     "10"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "Phụ phí trọng lượng: ceil(weight-2)*5 khi weight > 2",
+    "boundary_values": [
+     "2 (0 phụ phí)",
+     "2.01 (+5)",
+     "2.5 (+5)",
+     "3 (+5)",
+     "3.5 (+10)",
+     "4 (+10)",
+     "10 (combo)"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "Phụ phí khoảng cách: (distance-10)*2 khi distance > 10",
+    "boundary_values": [
+     "10 (0)",
+     "10.5 (+1)",
+     "12 (+4)",
+     "25 (+30)"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "Giảm 20% cho thành viên áp dụng sau mọi phụ phí",
+    "boundary_values": [
+     "phí gốc 15 (12)",
+     "phí gốc 16 (12.8)",
+     "phí gốc 24 (19.2)",
+     "phí gốc 85 (68)"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "Làm tròn 2 chữ số (Math.round(x*100)/100)",
+    "boundary_values": [
+     "15.666 làm tròn lên 15.67",
+     "12.16 giữ nguyên",
+     "15.661 làm tròn xuống 15.66 (không được test)",
+     "x.xx5 nửa bước (không được test)"
+    ],
+    "covered": "partial"
+   },
+   {
+    "behavior": "Input NaN / Infinity",
+    "boundary_values": [
+     "NaN weight (NaN <= 0 là false, lọt qua validation)",
+     "Infinity distance"
+    ],
+    "covered": "no"
+   }
+  ],
+  "criteria": [
+   {
+    "id": "test_vs_implementation",
+    "status": "pass",
+    "evidence": "Mọi test chỉ assert giá trị trả về (toBe) hoặc lỗi ném ra (toThrow('INVALID_INPUT')). Không có spy, mock, hay đếm số lần gọi nội bộ. Refactor nội bộ (ví dụ đổi cách tính ceil) không làm test fail nếu kết quả không đổi.",
+    "suggestion": "Giữ nguyên cách assert theo giá trị quan sát được.",
+    "confidence": "high"
+   },
+   {
+    "id": "equivalence_boundary",
+    "status": "warn",
+    "evidence": "Các nhóm trọng lượng (0.01/0.5/2 | 2.01/2.5/3 | 3.5/4) và khoảng cách (10 | 10.5 | 12 | 25) được gom đúng nhánh và có đủ cạnh ranh giới 2 và 10. Thiếu: (1) distance=0 chỉ có 'không ném lỗi khi khoảng cách = 0' dùng not.toThrow, không khóa giá trị 15; (2) validation weight chỉ có 0 và 0.01, không có giá trị sát 0 hơn; (3) distance âm nhỏ (-0.0001) không được test; (4) làm tròn chỉ test một chiều lên (15.666), thiếu làm tròn xuống và nửa bước; (5) NaN/Infinity không có. Đây là phụ thuộc domain nên độ tin cậy vừa phải.",
+    "suggestion": "Thêm: calculateShippingFee(1, 0, 100, false).toBe(15); calculateShippingFee(0.001, 5, 100, false) và expect throw với weight=-0.0001 hoặc distance=-0.0001; calculateShippingFee(1, 10.331, 100, false).toBe(15.66) (làm tròn xuống); một case x.xx5 có kết quả xác định; và quyết định rõ NaN nên ném lỗi hay không rồi test.",
+    "confidence": "medium"
+   },
+   {
+    "id": "assertion_strength",
+    "status": "warn",
+    "evidence": "Phần lớn assert dùng toBe với giá trị số chính xác (ví dụ 'vượt 2kg => +10' expect 25), đủ mạnh. Điểm yếu: 'không ném lỗi khi khoảng cách = 0' dùng expect(...).not.toThrow() và không kiểm tra giá trị trả về, nên một mutation trả về 0 vẫn pass. toThrow('INVALID_INPUT') là substring match, chấp nhận được.",
+    "suggestion": "Đổi thành: expect(calculateShippingFee(1, 0, 100, false)).toBe(15) (gộp với việc kiểm tra không ném lỗi).",
+    "confidence": "high"
+   },
+   {
+    "id": "isolation",
+    "status": "pass",
+    "evidence": "Hàm thuần, không có state dùng chung. Mỗi test tự tạo input inline. Không có beforeEach/afterEach hay biến module-level thay đổi. Chạy it.only hoặc đảo thứ tự không ảnh hưởng kết quả.",
+    "suggestion": "Không cần thay đổi.",
+    "confidence": "high"
+   },
+   {
+    "id": "determinism",
+    "status": "pass",
+    "evidence": "Không dùng Date.now, Math.random, I/O hay async. Kết quả số luôn cố định. Các giá trị float như 19.2 và 12.16 đều đã qua Math.round(x*100)/100 nên so sánh toBe ổn định.",
+    "suggestion": "Không cần thay đổi.",
+    "confidence": "high"
+   },
+   {
+    "id": "naming_clarity",
+    "status": "pass",
+    "evidence": "Tên mô tả đúng hành vi cụ thể, ví dụ 'vượt 2kg một chút (2.01kg) tính làm tròn lên: +5' và 'đơn đúng 500 được miễn phí'. Có vài chỗ lệch nhỏ: 'đơn trên 500 ... kể cả khi là thành viên' thực tế dùng 800; 'không ném lỗi khi trọng lượng dương rất nhỏ' dùng đúng ngưỡng 0.01 có thể gây nhầm khi đọc để biết ngưỡng validation thực sự.",
+    "suggestion": "Đổi 'đơn trên 500' thành 'đơn 800 được miễn phí kể cả thành viên'. Với test 0.01, đổi tên thành 'trọng lượng 0.01 (dương) hợp lệ' hoặc dùng giá trị nhỏ hơn để tách biệt rõ.",
+    "confidence": "medium"
+   },
+   {
+    "id": "fake_pass_risk",
+    "status": "warn",
+    "evidence": "Các mutation bị bắt: '<= 0' thành '< 0' (bị bắt bởi test weight=0), '> 2' thành '>= 2' (tương đương, không đổi hành vi), ceil thành floor (bắt bởi 2.01 và 2.5), '*0.8' thành '*0.85' (bắt), bỏ Math.round (bắt bởi 15.666), '>= 500' thành '> 500' (bắt bởi test 500). Các mutation còn sống: (a) thêm 'if (distanceKm <= 0) return 0;' vì test distance=0 chỉ dùng not.toThrow; (b) đổi validation thành 'if (weightKg < 0.01) throw' vì test duy nhất ở biên là 0.01 nên vẫn pass; (c) 'if (distanceKm < -0.1) throw' vì -0.5 vẫn bị ném; (d) chuyển kiểm tra 'orderTotal >= 500' lên trước validation vì không có test input sai với đơn >= 500.",
+    "suggestion": "Thêm test: distance=0 expect 15; weight=0.001 expect 15 (và weight=0.0001 expect 15 nếu muốn chặn ngưỡng lớn hơn); distance=-0.0001 expect throw; calculateShippingFee(0, 5, 500, false) expect throw INVALID_INPUT (khóa thứ tự validation trước miễn phí). Sau đó chạy mutation testing (ví dụ Stryker) để xác nhận các mutation trên đã bị bắt.",
+    "confidence": "high"
+   }
+  ],
+  "overall_verdict": "good",
+  "summary": "Bộ test khá tốt: 24 test đều kiểm tra giá trị trả về hoặc lỗi ném ra ở public boundary, không mock nội bộ, độc lập và xác định. Các biên quan trọng (2, 10, 500, làm tròn, giảm 20%) đều có ca kiểm tra và đa số mutation thủ công (đổi ceil/floor, đổi hệ số, bỏ làm tròn, đổi >= thành >) đều bị bắt. Điểm yếu cụ thể: (1) test 'khoảng cách = 0' chỉ dùng not.toThrow nên mutation trả về 0 vẫn pass; (2) biên validation gần 0 và âm nhỏ chưa được kiểm tra, nên mutation 'weightKg < 0.01' hoặc 'distanceKm < -0.1' còn sống; (3) chưa khóa thứ tự validation trước miễn phí; (4) làm tròn chỉ test một chiều và chưa có NaN. Các điểm này nên được bổ sung, nhưng không làm test thành 'an toàn giả' ở mức nghiêm trọng."
+ },
+ "total_seconds": 93.0,
+ "total_cost_usd": 0.0115
+}

@@ -1,0 +1,175 @@
+{
+ "source": "src/eligibility.ts",
+ "model": "haiku",
+ "rounds": [
+  {
+   "round": 1,
+   "jest_pass": true,
+   "mutation_score": 100.0,
+   "killed": 25,
+   "survived": 0,
+   "mutants": 25,
+   "tests": 18,
+   "rubric_pass": 5,
+   "verdict": "good",
+   "cost_usd": 0.0082,
+   "seconds": 68.2
+  }
+ ],
+ "mode": "naive",
+ "stop_reason": "single_shot",
+ "final_review": {
+  "derived_behaviors": [
+   {
+    "behavior": "Tuổi không phải số nguyên hữu hạn (NaN, ±Infinity, số thập phân) → ném INVALID_AGE",
+    "boundary_values": [
+     "0.1",
+     "18.5",
+     "NaN",
+     "Infinity",
+     "-Infinity",
+     "17.5 (chưa test)",
+     "65.5 (chưa test)"
+    ],
+    "covered": "partial"
+   },
+   {
+    "behavior": "Tuổi âm → ném INVALID_AGE",
+    "boundary_values": [
+     "-1",
+     "0 (biên, không ném)"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "Tuổi 0..17 → REJECTED (nhánh age < 18)",
+    "boundary_values": [
+     "0",
+     "17"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "Tuổi 18..65 → qua bước kiểm tra tuổi",
+    "boundary_values": [
+     "18",
+     "65"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "Tuổi > 65 → REJECTED (nhánh age > 65)",
+    "boundary_values": [
+     "65 (không reject)",
+     "66",
+     "80",
+     "120"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "Thu nhập < 8 (kể cả âm) → REJECTED",
+    "boundary_values": [
+     "-5",
+     "0",
+     "1",
+     "7",
+     "7.99"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "Thu nhập >= 8 → APPROVED (khi tuổi hợp lệ)",
+    "boundary_values": [
+     "8",
+     "8.01",
+     "20",
+     "1000"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "Thu nhập không phải số (NaN, ±Infinity): so sánh < 8 luôn false nên source trả APPROVED; test không khóa hành vi này",
+    "boundary_values": [
+     "NaN",
+     "Infinity",
+     "-Infinity"
+    ],
+    "covered": "no"
+   },
+   {
+    "behavior": "Thứ tự ưu tiên: lỗi tuổi không hợp lệ ném trước khi xét thu nhập",
+    "boundary_values": [
+     "(-1, 0)"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "Kết hợp tuổi và thu nhập (cả hai hợp lệ, một trong hai sai, cả hai sai)",
+    "boundary_values": [
+     "(35,20)",
+     "(35,5)",
+     "(17,50)",
+     "(70,50)",
+     "(10,1)"
+    ],
+    "covered": "yes"
+   }
+  ],
+  "criteria": [
+   {
+    "id": "test_vs_implementation",
+    "status": "pass",
+    "evidence": "Toàn bộ test chỉ assert trên giá trị trả về (toBe('APPROVED'/'REJECTED')) hoặc exception (toThrow('INVALID_AGE')) của hàm public checkEligibility. Không có spy, mock hay đếm số lần gọi nội bộ. Refactor các nhánh if (đổi thứ tự, gộp điều kiện) không làm test fail nếu hành vi không đổi.",
+    "suggestion": "Không cần sửa.",
+    "confidence": "high"
+   },
+   {
+    "id": "equivalence_boundary",
+    "status": "warn",
+    "evidence": "Nhóm theo nhánh hành vi khá tốt (describe 'kiểm tra đầu vào tuổi', 'giới hạn tuổi', 'giới hạn thu nhập', 'kết hợp'). Các biên số nguyên 17/18, 65/66, 7.99/8/8.01, -1/0 đều có cả hai phía. Thiếu: (1) lớp thu nhập không hữu hạn NaN/Infinity hoàn toàn không có test, dù source xử lý khác (NaN < 8 là false → APPROVED); (2) lớp tuổi thập phân gần biên trên 65.5 và 17.5 chưa có, chỉ có 18.5 và 0.1; (3) test 'từ chối khi tuổi = 17' trùng với 17 trong it.each([0, 1, 17]) nên không thêm biên nào mới.",
+    "suggestion": "Thêm it.each([NaN, Infinity, -Infinity]) cho thu nhập với kỳ vọng được quyết định rõ theo nghiệp vụ (REJECTED hay ném lỗi INVALID_INCOME), để test khóa hành vi thay vì để ngầm định. Thêm 17.5 và 65.5 vào danh sách tuổi không nguyên. Xóa test 'tuổi = 17' trùng lặp hoặc bỏ 17 khỏi it.each.",
+    "confidence": "medium"
+   },
+   {
+    "id": "assertion_strength",
+    "status": "pass",
+    "evidence": "Assert dùng toBe với chuỗi exact và toThrow('INVALID_AGE'). Mutation thủ công: đổi 'age < 18' thành 'age <= 18' → test 'chấp nhận khi tuổi = 18' fail. Đổi 'age > 65' thành 'age >= 65' → test 'tuổi = 65' fail. Đổi 'monthlyIncome < 8' thành '<= 8' → test 'thu nhập = 8' fail. Bỏ 'age < 0' → test '(-1)' fail vì không ném lỗi. Bỏ Number.isInteger → test '18.5' fail. Không có toBeDefined/toBeTruthy.",
+    "suggestion": "Tùy chọn: thay toThrow('INVALID_AGE') (so khớp substring) bằng toThrow(new Error('INVALID_AGE')) hoặc /^INVALID_AGE$/ để message biến thể như 'INVALID_AGE_X' không lọt.",
+    "confidence": "high"
+   },
+   {
+    "id": "isolation",
+    "status": "pass",
+    "evidence": "Hàm thuần, không có state dùng chung. Mỗi test tự truyền input trực tiếp (ví dụ checkEligibility(35, 20)). Không có beforeEach/afterEach, không có biến module ghi đè. Kết quả không phụ thuộc thứ tự chạy hay it.only.",
+    "suggestion": "Không cần sửa.",
+    "confidence": "high"
+   },
+   {
+    "id": "determinism",
+    "status": "pass",
+    "evidence": "Không dùng Date.now, Math.random, async, timer hay so sánh với ngày cố định. Cùng input luôn cùng output.",
+    "suggestion": "Không cần sửa.",
+    "confidence": "high"
+   },
+   {
+    "id": "naming_clarity",
+    "status": "pass",
+    "evidence": "Tên mô tả hành vi cụ thể, ví dụ 'từ chối khi tuổi = 66 (biên trên ngoài khoảng)', 'ném lỗi INVALID_AGE trước khi xét thu nhập', 'chấp nhận khi thu nhập = 8 (biên hợp lệ)'. Dùng %p cho it.each nên tên có giá trị cụ thể. Nhỏ: 'từ chối khi tuổi = 17 (biên dưới ngoài khoảng)' và mục it.each 'dưới 18 (%p)' mô tả cùng một hành vi nên dễ gây nhầm về mục đích.",
+    "suggestion": "Gộp hoặc bỏ test trùng lặp 17 để tên không chồng chéo.",
+    "confidence": "medium"
+   },
+   {
+    "id": "fake_pass_risk",
+    "status": "warn",
+    "evidence": "Hầu hết mutation logic đều bị bắt (đổi biên <, <=, >, >=, bỏ từng nhánh, đổi thứ tự kiểm tra). Mutation còn sống (survivor) đã xác nhận: (1) thêm 'if (Number.isNaN(monthlyIncome)) return REJECTED' hoặc đổi 'monthlyIncome < 8' thành '!(monthlyIncome >= 8)' → không test nào fail, vì không có case NaN/Infinity cho thu nhập; (2) đổi message thành 'INVALID_AGE_X' vẫn pass do toThrow('INVALID_AGE') khớp substring; (3) đổi 'age > 65' thành 'age > 65.5' tương đương với input nguyên nên không có test nào phân biệt (không phải lỗi test).",
+    "suggestion": "Thêm case thu nhập NaN/Infinity với kỳ vọng rõ ràng để bắt survivor (1). Siết toThrow như đã nêu ở assertion_strength để bắt survivor (2).",
+    "confidence": "high"
+   }
+  ],
+  "overall_verdict": "good",
+  "summary": "Bộ test chất lượng tốt: assert vào giá trị trả về và exception ở public boundary, các biên số nguyên (17/18, 65/66, 7.99/8/8.01, -1/0) đều được kiểm cả hai phía, mutation phổ biến đều bị bắt, test độc lập và xác định. Điểm yếu chính: lớp thu nhập không hữu hạn (NaN, ±Infinity) chưa có test nào. Source hiện trả APPROVED cho NaN vì so sánh NaN < 8 luôn false, nên đây là hành vi ngầm chưa được khóa; mutation thêm kiểm tra NaN sẽ sống sót. Ngoài ra còn thiếu 17.5/65.5, test tuổi = 17 bị trùng, và toThrow chỉ so khớp substring. Đây là cần làm thêm chứ không phải lỗi nghiêm trọng."
+ },
+ "total_seconds": 68.2,
+ "total_cost_usd": 0.0082
+}

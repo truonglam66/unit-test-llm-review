@@ -1,0 +1,335 @@
+{
+ "source": "src/shipping-fee.ts",
+ "model": "haiku",
+ "rounds": [
+  {
+   "round": 1,
+   "jest_pass": true,
+   "mutation_score": 94.1,
+   "killed": 32,
+   "survived": 2,
+   "mutants": 34,
+   "tests": 50,
+   "rubric_pass": 5,
+   "verdict": "good",
+   "cost_usd": 0.0228,
+   "seconds": 181.2
+  },
+  {
+   "round": 2,
+   "jest_pass": true,
+   "mutation_score": 94.1,
+   "killed": 32,
+   "survived": 2,
+   "mutants": 34,
+   "tests": 53,
+   "rubric_pass": 4,
+   "verdict": "needs_work",
+   "cost_usd": 0.0416,
+   "seconds": 323.3
+  }
+ ],
+ "mode": "pipeline",
+ "behaviors": [
+  {
+   "name": "Input không hợp lệ: weightKg <= 0 ném lỗi",
+   "condition": "weightKg <= 0 (distanceKm và orderTotal bất kỳ hợp lệ)",
+   "expected": "Ném Error('INVALID_INPUT')",
+   "boundary_values": [
+    "0"
+   ]
+  },
+  {
+   "name": "Input không hợp lệ: distanceKm < 0 ném lỗi",
+   "condition": "weightKg > 0 và distanceKm < 0",
+   "expected": "Ném Error('INVALID_INPUT')",
+   "boundary_values": [
+    "0"
+   ]
+  },
+  {
+   "name": "Validation chạy trước miễn phí ship",
+   "condition": "weightKg <= 0 hoặc distanceKm < 0, nhưng orderTotal >= 500",
+   "expected": "Vẫn ném Error('INVALID_INPUT'), KHÔNG trả 0",
+   "boundary_values": [
+    "500"
+   ]
+  },
+  {
+   "name": "Đơn từ 500 trở lên được miễn phí",
+   "condition": "Input hợp lệ và orderTotal >= 500 (bất kể weight, distance, isMember)",
+   "expected": "Trả về 0 ngay, không áp dụng giảm thành viên hay làm tròn phức tạp",
+   "boundary_values": [
+    "500"
+   ]
+  },
+  {
+   "name": "Đơn dưới 500 vẫn tính phí",
+   "condition": "Input hợp lệ và orderTotal < 500",
+   "expected": "Tính phí theo công thức bình thường (base 15 + phụ phí)",
+   "boundary_values": [
+    "500"
+   ]
+  },
+  {
+   "name": "Khối lượng nhẹ: 0 < weightKg <= 2 không phụ phí",
+   "condition": "0 < weightKg <= 2",
+   "expected": "Không cộng thêm phụ phí khối lượng; ví dụ weightKg=2 → fee 15 (trước giảm giá/làm tròn)",
+   "boundary_values": [
+    "0",
+    "2"
+   ]
+  },
+  {
+   "name": "Khối lượng vượt 2kg, bậc 1: 2 < weightKg <= 3",
+   "condition": "2 < weightKg <= 3 (ceil(weightKg-2)=1)",
+   "expected": "Cộng đúng 5; ví dụ weightKg=2.5 → fee 20; weightKg=2 thuộc nhóm không phụ phí",
+   "boundary_values": [
+    "2",
+    "3"
+   ]
+  },
+  {
+   "name": "Khối lượng vượt, bậc 2: 3 < weightKg <= 4",
+   "condition": "3 < weightKg <= 4 (ceil(weightKg-2)=2)",
+   "expected": "Cộng đúng 10; ví dụ weightKg=3.5 → fee 25; weightKg=3 vẫn là bậc 1 (+5)",
+   "boundary_values": [
+    "3",
+    "4"
+   ]
+  },
+  {
+   "name": "Khối lượng vượt, bậc cao: weightKg > 4",
+   "condition": "weightKg > 4 (ceil làm tròn lên theo từng kg, mỗi bậc nguyên là một cạnh)",
+   "expected": "Cộng 5*ceil(weightKg-2); ví dụ weightKg=4.5 → cộng 15, fee 30; weightKg=4 vẫn +10",
+   "boundary_values": [
+    "4"
+   ]
+  },
+  {
+   "name": "Quãng đường trong ngưỡng miễn phí km: 0 <= distanceKm <= 10",
+   "condition": "0 <= distanceKm <= 10",
+   "expected": "Không cộng phụ phí quãng đường; distanceKm=10 không phụ phí",
+   "boundary_values": [
+    "0",
+    "10"
+   ]
+  },
+  {
+   "name": "Quãng đường vượt 10km: distanceKm > 10",
+   "condition": "distanceKm > 10",
+   "expected": "Cộng (distanceKm-10)*2; ví dụ distanceKm=12 → +4; distanceKm=10.01 → +0.02",
+   "boundary_values": [
+    "10"
+   ]
+  },
+  {
+   "name": "Thành viên được giảm 20%",
+   "condition": "isMember = true và không rơi vào nhánh miễn phí",
+   "expected": "fee = fee*0.8 sau khi cộng phụ phí; ví dụ weightKg=3, distanceKm=12, isMember → (15+5+4)*0.8 = 19.2; fee cơ bản 15 → 12",
+   "boundary_values": []
+  },
+  {
+   "name": "Khách không phải thành viên không giảm",
+   "condition": "isMember = false và không rơi vào nhánh miễn phí",
+   "expected": "Giữ nguyên fee sau phụ phí; không nhân 0.8",
+   "boundary_values": []
+  },
+  {
+   "name": "Làm tròn 2 chữ số thập phân",
+   "condition": "fee sau cùng có phần thập phân nằm quanh nửa xu (ví dụ distanceKm=10.0025 → fee 15.005; fee nằm giữa 15.005 và 15.015 làm tròn lên 15.01)",
+   "expected": "Math.round(fee*100)/100; giá trị nửa xu có thể lệch do số thực dấu phẩy động, nên so sánh bằng kết quả đã kiểm chứng hoặc toBeCloseTo",
+   "boundary_values": [
+    "15.005",
+    "15.015"
+   ]
+  },
+  {
+   "name": "Giá trị đặc biệt không hữu hạn/NaN",
+   "condition": "weightKg hoặc distanceKm = NaN, Infinity, -Infinity; hoặc orderTotal = NaN",
+   "expected": "NaN không bị bắt bởi điều kiện (NaN <= 0 và NaN < 0 đều false) nên không ném lỗi và trả NaN; Infinity weight trả Infinity; -Infinity weight ném lỗi; orderTotal NaN không miễn phí và tính phí bình thường. Đây là điểm cần test riêng vì hành vi có thể không mong muốn",
+   "boundary_values": []
+  },
+  {
+   "name": "Không có phụ thuộc thời gian hay ngẫu nhiên",
+   "condition": "Hàm thuần túy: không dùng Date, Math.random, I/O hay trạng thái toàn cục",
+   "expected": "Không cần mock timer hay random; kết quả chỉ phụ thuộc 4 tham số đầu vào",
+   "boundary_values": []
+  }
+ ],
+ "stop_reason": "no_improvement",
+ "final_review": {
+  "derived_behaviors": [
+   {
+    "behavior": "Validation weightKg <= 0 ném INVALID_INPUT (NaN lọt qua vì NaN <= 0 là false)",
+    "boundary_values": [
+     "0 (ném)",
+     "0.001 (không ném)",
+     "-1",
+     "-Infinity (ném)",
+     "NaN (lọt, không ném)"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "Validation distanceKm < 0 ném INVALID_INPUT (NaN lọt qua)",
+    "boundary_values": [
+     "-0.01 (ném)",
+     "0 (không ném)",
+     "-1",
+     "-Infinity (ném)",
+     "NaN (lọt)"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "Validation chạy trước nhánh miễn phí (orderTotal >= 500)",
+    "boundary_values": [
+     "weightKg=0 với orderTotal=500 (ném)",
+     "distanceKm=-1 với orderTotal=1000 và member (ném)"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "Miễn phí khi orderTotal >= 500, bỏ qua mọi phụ phí và giảm giá",
+    "boundary_values": [
+     "499.99 (không miễn phí)",
+     "500 (miễn phí)",
+     "1000",
+     "Infinity",
+     "0",
+     "NaN (không miễn phí, pin hành vi)"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "Phụ phí khối lượng: ceil(weightKg-2)*5 khi weightKg > 2, bậc thay đổi tại mỗi số nguyên",
+    "boundary_values": [
+     "2 (không phụ phí)",
+     "2.000001 (bậc 1)",
+     "2.5",
+     "3 (bậc 1, biên trên)",
+     "3.000001 (bậc 2) – KHÔNG CÓ TEST",
+     "3.5 (bậc 2)",
+     "4 (bậc 2, biên trên)",
+     "4.000001 (bậc 3) – KHÔNG CÓ TEST",
+     "4.5",
+     "5 (bậc 3)",
+     "5.01 (bậc 4)",
+     "102"
+    ],
+    "covered": "partial"
+   },
+   {
+    "behavior": "Phụ phí quãng đường: (distanceKm-10)*2 khi distanceKm > 10",
+    "boundary_values": [
+     "0 (không phụ phí)",
+     "9.99",
+     "10 (biên, không phụ phí)",
+     "10.01 (0.02)",
+     "10.5",
+     "12",
+     "20",
+     "100"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "Giảm 20% cho thành viên, áp dụng sau phụ phí, trước làm tròn",
+    "boundary_values": [
+     "member vs non-member cùng input",
+     "phí 15, 20, 30, 515 (412), 195 (156)",
+     "499.99 member (12)",
+     "orderTotal=500 member (0, không giảm)"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "Làm tròn 2 chữ số bằng Math.round(x*100)/100 (half-up)",
+    "boundary_values": [
+     "15.0048 -> 15 (dưới)",
+     "15.0052 -> 15.01 (trên)",
+     "member 12.00192 -> 12",
+     "member 12.00608 -> 12.01",
+     "12.1 exact",
+     "chính xác nửa 15.125 -> 15.13 (CHƯA TEST)"
+    ],
+    "covered": "partial"
+   },
+   {
+    "behavior": "Giá trị không hữu hạn: Infinity trọng lượng/quãng đường trả Infinity; NaN bị pin là 'bỏ qua phụ phí'",
+    "boundary_values": [
+     "weightKg=Infinity",
+     "distanceKm=Infinity",
+     "weightKg=NaN",
+     "distanceKm=NaN",
+     "orderTotal=NaN"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "Kết hợp phụ phí khối lượng + quãng đường không thành viên",
+    "boundary_values": [
+     "(3,12) -> 24",
+     "(2.5,15) -> 30"
+    ],
+    "covered": "yes"
+   }
+  ],
+  "criteria": [
+   {
+    "id": "test_vs_implementation",
+    "status": "pass",
+    "evidence": "Mọi test chỉ gọi calculateShippingFee và assert giá trị trả về hoặc thông điệp lỗi (toBe / toThrow). Không có spy, mock nội bộ, hay đếm lời gọi. Refactor (ví dụ đổi ceil thành công thức khác tương đương, đổi thứ tự cộng phụ phí) không làm test fail.",
+    "suggestion": "Giữ nguyên hướng public-boundary hiện tại.",
+    "confidence": "high"
+   },
+   {
+    "id": "equivalence_boundary",
+    "status": "warn",
+    "evidence": "Các class chính được phủ tốt: weightKg<=0 / >0, distanceKm<0 / >=0, orderTotal<500 / >=500, member true/false, distance<=10 / >10. Thiếu biên của bậc phụ phí khối lượng: không có test cho 3.000001 (phải là 25) và 4.000001 (phải là 30); chỉ có 3, 3.5, 4, 4.5 nên không khoanh vùng được ngưỡng bậc 2 và bậc 3. Thiếu biên làm tròn nửa: không có test cho giá trị đúng .xx5 (ví dụ distanceKm = 10.0625, không thành viên, phải là 15.13). Test 'weightKg = 2.000001' phủ tốt biên bậc 1 nên chỉ thiếu bậc 2 và 3.",
+    "suggestion": "Thêm: calculateShippingFee(3.000001, 0, 0, false) -> 25; calculateShippingFee(4.000001, 0, 0, false) -> 30; calculateShippingFee(3.25, 0, 0, false) -> 25 (vùng giữa); calculateShippingFee(1, 10.0625, 0, false) -> 15.13 (dùng giá trị nhị phân chính xác 0.0625 để tránh sai số float, kiểm chứng làm tròn half-up).",
+    "confidence": "medium"
+   },
+   {
+    "id": "assertion_strength",
+    "status": "pass",
+    "evidence": "Expected được tính tay (ví dụ '(15+5+4)*0.8 = 19.2', '412 từ 515*0.8'), không lặp lại logic nguồn nên không circular. toBe đủ chặt cho số. Mutation kiểm tay: đổi '<= 0' thành '< 0' bị bắt bởi 'weightKg = 0'; đổi 'distanceKm < 0' thành '<= 0' bị bắt bởi 'distanceKm = 0'; đổi '>= 500' thành '> 500' bị bắt bởi 'orderTotal = 500'; Math.ceil thành Math.floor bị bắt bởi 'weightKg = 2.5'; '* 0.8' thành '* 0.81' bị bắt bởi 'thành viên với phí 15 trả 12'; bỏ Math.round bị bắt bởi 'distanceKm = 10.0024'. Điểm yếu nhỏ: toThrow('INVALID_INPUT') so khớp chuỗi con, nên message 'INVALID_INPUT_XYZ' vẫn pass.",
+    "suggestion": "Siết lỗi: expect(() => ...).toThrow(/^INVALID_INPUT$/) hoặc so khớp message đầy đủ, để không lọt các thông điệp dài hơn.",
+    "confidence": "high"
+   },
+   {
+    "id": "isolation",
+    "status": "pass",
+    "evidence": "Mọi test tự truyền input literal, không có biến dùng chung, beforeEach, hay state ngoài. Hàm thuần nên đảo thứ tự hoặc chạy it.only từng test đều cho cùng kết quả.",
+    "suggestion": "Không cần thay đổi.",
+    "confidence": "high"
+   },
+   {
+    "id": "determinism",
+    "status": "pass",
+    "evidence": "Không có Date.now, Math.random, timer, hay async. Không có test phụ thuộc ngày cố định. Các giá trị Infinity/NaN là hằng số IEEE nên ổn định.",
+    "suggestion": "Không cần thay đổi.",
+    "confidence": "high"
+   },
+   {
+    "id": "naming_clarity",
+    "status": "warn",
+    "evidence": "Phần lớn tên mô tả cụ thể đầu vào và kết quả (ví dụ 'distanceKm = 10.0026 (phí 15.0052) làm tròn lên 15.01'). Không nhất quán ở nhóm 'giá trị đặc biệt': NaN được gắn nhãn 'hành vi hiện tại', còn 'weightKg = Infinity trả Infinity' và 'distanceKm = Infinity trả Infinity' không có nhãn, nhưng cũng đang pin hành vi đáng ngờ (khối lượng vô hạn được chấp nhận). Test 'orderTotal = NaN ... trả 15' cũng pin hành vi không rõ là đúng.",
+    "suggestion": "Gắn nhãn đồng nhất, ví dụ 'hành vi hiện tại (chưa chặn): weightKg = Infinity trả Infinity'. Với các input không hợp lệ, cân nhắc đặt tên theo kỳ vọng nghiệp vụ và dùng it.todo / test.failing khi biết là bug.",
+    "confidence": "medium"
+   },
+   {
+    "id": "fake_pass_risk",
+    "status": "warn",
+    "evidence": "Mutant có thể sống sót: thêm nhánh làm bậc 2 bắt đầu sớm ở vùng không test, ví dụ 'if (weightKg > 3 && weightKg < 3.5) fee -= 5' (3.25 trả 20 thay vì 25). Mọi test hiện có vẫn pass vì không có input nào trong (3, 3.5) và 3.000001 không được test. Tương tự bậc 3 ở (4, 4.5). Làm tròn nửa cũng không bị khoá: thay Math.round bằng biến thể khác chỉ khác ở nửa chẵn/lẻ sẽ không bị bắt, vì không có input .xx5 chính xác. Pin NaN/Infinity: nếu sửa lỗi (ném INVALID_INPUT cho NaN) thì test NaN fail, tức test đang khoá bug thay vì bảo vệ hành vi đúng.",
+    "suggestion": "Thêm test cho 3.000001, 3.25, 4.000001 và 10.0625 (15.13) như trên để đóng các mutant sống sót. Với NaN, thay bằng test kỳ vọng ném lỗi kèm test.failing/todo, hoặc ghi chú rõ đây là characterization test có chủ đích.",
+    "confidence": "high"
+   }
+  ],
+  "overall_verdict": "needs_work",
+  "summary": "Bộ test khá tốt: kiểm chứng qua public boundary, assert số chính xác với expected tính tay, độc lập và xác định (deterministic). Các class chính (validation, miễn phí ở 500, member, phụ phí quãng đường tại 10) đều có biên. Điểm yếu cần sửa: (1) bậc phụ phí khối lượng chỉ phủ tại số nguyên và 2.000001/5.01, thiếu 3.000001, 3.25, 4.000001, nên một mutant dời ngưỡng bậc 2 sang 3.5 sống sót; (2) làm tròn nửa (15.125 -> 15.13) chưa được test; (3) các test NaN/Infinity pin hành vi có vấn đề, sửa bug sẽ làm test fail và tên không nhất quán nhãn 'hành vi hiện tại'; (4) toThrow dùng so khớp chuỗi con. Không phát hiện vấn đề về isolation hay determinism."
+ },
+ "total_seconds": 323.3,
+ "total_cost_usd": 0.0416
+}

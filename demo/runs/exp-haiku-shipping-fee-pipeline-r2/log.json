@@ -1,0 +1,350 @@
+{
+ "source": "src/shipping-fee.ts",
+ "model": "haiku",
+ "rounds": [
+  {
+   "round": 1,
+   "jest_pass": true,
+   "mutation_score": 94.1,
+   "killed": 32,
+   "survived": 2,
+   "mutants": 34,
+   "tests": 54,
+   "rubric_pass": 6,
+   "verdict": "good",
+   "cost_usd": 0.0289,
+   "seconds": 232.4
+  },
+  {
+   "round": 2,
+   "jest_pass": true,
+   "mutation_score": 94.1,
+   "killed": 32,
+   "survived": 2,
+   "mutants": 34,
+   "tests": 60,
+   "rubric_pass": 3,
+   "verdict": "good",
+   "cost_usd": 0.0469,
+   "seconds": 358.1
+  }
+ ],
+ "mode": "pipeline",
+ "behaviors": [
+  {
+   "name": "Lỗi: weightKg <= 0",
+   "condition": "weightKg <= 0, distanceKm và orderTotal tùy ý (kể cả orderTotal >= 500, vì kiểm tra throw chạy trước nhánh miễn phí)",
+   "expected": "throw Error('INVALID_INPUT')",
+   "boundary_values": [
+    "weightKg = 0"
+   ]
+  },
+  {
+   "name": "Lỗi: distanceKm < 0 khi weightKg > 0",
+   "condition": "weightKg > 0 VÀ distanceKm < 0, orderTotal tùy ý",
+   "expected": "throw Error('INVALID_INPUT')",
+   "boundary_values": [
+    "distanceKm = -0.01 (sát cạnh 0)",
+    "weightKg = 0.01 (sát cạnh 0)"
+   ]
+  },
+  {
+   "name": "Miễn phí: hợp lệ và orderTotal >= 500",
+   "condition": "weightKg > 0, distanceKm >= 0, orderTotal >= 500; kết quả không phụ thuộc weight, distance, isMember",
+   "expected": "return 0 (ví dụ weightKg=100, distanceKm=50, isMember=true vẫn trả 0)",
+   "boundary_values": [
+    "weightKg = 0.01",
+    "distanceKm = 0",
+    "orderTotal = 500"
+   ]
+  },
+  {
+   "name": "C1: weight (0,2], distance [0,10], không thành viên, orderTotal < 500",
+   "condition": "0 < weightKg <= 2 VÀ 0 <= distanceKm <= 10 VÀ isMember = false VÀ orderTotal < 500 (không phụ phí, không giảm giá)",
+   "expected": "15",
+   "boundary_values": [
+    "weightKg = 0.01",
+    "weightKg = 2",
+    "distanceKm = 0",
+    "distanceKm = 10",
+    "orderTotal = 499.99"
+   ]
+  },
+  {
+   "name": "C2: weight (0,2], distance [0,10], thành viên, orderTotal < 500",
+   "condition": "0 < weightKg <= 2 VÀ 0 <= distanceKm <= 10 VÀ isMember = true VÀ orderTotal < 500",
+   "expected": "15 * 0.8 = 12",
+   "boundary_values": [
+    "weightKg = 0.01",
+    "weightKg = 2",
+    "distanceKm = 0",
+    "distanceKm = 10",
+    "orderTotal = 499.99"
+   ]
+  },
+  {
+   "name": "C3: weight (0,2], distance > 10, không thành viên, orderTotal < 500",
+   "condition": "0 < weightKg <= 2 VÀ distanceKm > 10 VÀ isMember = false VÀ orderTotal < 500",
+   "expected": "15 + (distanceKm - 10) * 2; ví dụ distanceKm=12 -> 19",
+   "boundary_values": [
+    "weightKg = 0.01",
+    "weightKg = 2",
+    "distanceKm = 10.01",
+    "orderTotal = 499.99"
+   ]
+  },
+  {
+   "name": "C4: weight (0,2], distance > 10, thành viên, orderTotal < 500",
+   "condition": "0 < weightKg <= 2 VÀ distanceKm > 10 VÀ isMember = true VÀ orderTotal < 500 (giảm 20% áp dụng cho cả phụ phí quãng đường)",
+   "expected": "(15 + (distanceKm - 10) * 2) * 0.8; ví dụ distanceKm=12 -> 15.2",
+   "boundary_values": [
+    "weightKg = 0.01",
+    "weightKg = 2",
+    "distanceKm = 10.01",
+    "orderTotal = 499.99"
+   ]
+  },
+  {
+   "name": "C5: weight > 2, distance [0,10], không thành viên, orderTotal < 500",
+   "condition": "weightKg > 2 VÀ 0 <= distanceKm <= 10 VÀ isMember = false VÀ orderTotal < 500. Ghi chú: ceil tạo bước tại weight = 3 và 3.01, nên kiểm thêm để bắt lỗi ceil (không tính là biên của lớp vì cùng nhánh)",
+   "expected": "15 + ceil(weightKg - 2) * 5; ví dụ weightKg=2.5 -> 20; weightKg=3 -> 20; weightKg=3.01 -> 25",
+   "boundary_values": [
+    "weightKg = 2.01",
+    "distanceKm = 0",
+    "distanceKm = 10",
+    "orderTotal = 499.99"
+   ]
+  },
+  {
+   "name": "C6: weight > 2, distance [0,10], thành viên, orderTotal < 500",
+   "condition": "weightKg > 2 VÀ 0 <= distanceKm <= 10 VÀ isMember = true VÀ orderTotal < 500",
+   "expected": "(15 + ceil(weightKg - 2) * 5) * 0.8; ví dụ weightKg=2.5 -> 16",
+   "boundary_values": [
+    "weightKg = 2.01",
+    "distanceKm = 0",
+    "distanceKm = 10",
+    "orderTotal = 499.99"
+   ]
+  },
+  {
+   "name": "C7: weight > 2, distance > 10, không thành viên, orderTotal < 500",
+   "condition": "weightKg > 2 VÀ distanceKm > 10 VÀ isMember = false VÀ orderTotal < 500 (cộng cả hai phụ phí)",
+   "expected": "15 + ceil(weightKg - 2) * 5 + (distanceKm - 10) * 2; ví dụ weightKg=2.5, distanceKm=12 -> 24",
+   "boundary_values": [
+    "weightKg = 2.01",
+    "distanceKm = 10.01",
+    "orderTotal = 499.99"
+   ]
+  },
+  {
+   "name": "C8: weight > 2, distance > 10, thành viên, orderTotal < 500",
+   "condition": "weightKg > 2 VÀ distanceKm > 10 VÀ isMember = true VÀ orderTotal < 500",
+   "expected": "(15 + ceil(weightKg - 2) * 5 + (distanceKm - 10) * 2) * 0.8; ví dụ weightKg=2.5, distanceKm=12 -> 19.2",
+   "boundary_values": [
+    "weightKg = 2.01",
+    "distanceKm = 10.01",
+    "orderTotal = 499.99"
+   ]
+  },
+  {
+   "name": "Đầu vào NaN (không có nhánh xử lý)",
+   "condition": "weightKg, distanceKm hoặc orderTotal là NaN. Mọi phép so sánh với NaN đều false nên không có nhánh nào bắt được",
+   "expected": "Không throw. NaN weight và NaN distance bị coi như không vượt ngưỡng (không phụ phí, trả 15 hoặc 12 nếu thành viên). NaN orderTotal không kích hoạt miễn phí. Đây là lỗ hổng cần quyết định: nên throw hay không",
+   "boundary_values": []
+  },
+  {
+   "name": "Đầu vào Infinity",
+   "condition": "weightKg = Infinity hoặc distanceKm = Infinity, các tham số còn lại hợp lệ",
+   "expected": "weightKg = Infinity -> phí = Infinity (ceil(Infinity) * 5); distanceKm = Infinity -> phí = Infinity. Không throw, không chặn",
+   "boundary_values": []
+  },
+  {
+   "name": "Làm tròn 2 chữ số: phần thập phân < 0.005 (làm tròn xuống)",
+   "condition": "Kết quả không miễn phí có phần thập phân sau khi nhân 100 nhỏ hơn 0.5. Ví dụ: không thành viên, distanceKm = 10.002 cho phí 15.004",
+   "expected": "Math.round(fee * 100) / 100 làm tròn xuống, ví dụ 15.004 -> 15.00",
+   "boundary_values": [
+    "fee = 15.004 (sát cạnh 0.005)"
+   ]
+  },
+  {
+   "name": "Làm tròn 2 chữ số: phần thập phân >= 0.005 (làm tròn lên)",
+   "condition": "Kết quả không miễn phí có phần thập phân sau khi nhân 100 từ 0.5 trở lên. Ví dụ: không thành viên, distanceKm = 10.0025 cho phí 15.005. Cần chạy để xác nhận vì sai số dấu phẩy động",
+   "expected": "Làm tròn lên về 15.01 theo kỳ vọng nghiệp vụ; kiểm tra thực tế vì float có thể cho 15.00",
+   "boundary_values": [
+    "fee = 15.005 (cạnh 0.005, thuộc lớp này)"
+   ]
+  }
+ ],
+ "stop_reason": "no_improvement",
+ "final_review": {
+  "derived_behaviors": [
+   {
+    "behavior": "Validation: weightKg <= 0 hoặc distanceKm < 0 thì ném Error('INVALID_INPUT'); kiểm tra chạy trước nhánh miễn phí",
+    "boundary_values": [
+     "weightKg = 0",
+     "weightKg = 0.01",
+     "weightKg = -1",
+     "distanceKm = 0",
+     "distanceKm = -0",
+     "distanceKm = -0.001",
+     "distanceKm = -1 với orderTotal = 500",
+     "weightKg = 0 với orderTotal = 500"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "Miễn phí khi orderTotal >= 500 (trả 0, kể cả thành viên)",
+    "boundary_values": [
+     "orderTotal = 499.99",
+     "orderTotal = 500",
+     "orderTotal = 501",
+     "thành viên với orderTotal = 500"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "Phí cơ bản 15 khi weight <= 2 và distance <= 10 (không thành viên)",
+    "boundary_values": [
+     "weightKg = 0.01",
+     "weightKg = 2",
+     "distanceKm = 0",
+     "distanceKm = 10"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "Phụ phí weight: ceil(weight-2)*5 khi weight > 2 (mỗi kg vượt, làm tròn lên)",
+    "boundary_values": [
+     "weightKg = 2.01 (1 bước)",
+     "weightKg = 3 (1 bước)",
+     "weightKg = 3.01 (2 bước)",
+     "weightKg = 4 (2 bước)",
+     "weightKg = 4.5 (3 bước)",
+     "weightKg = 100 (98 bước, lớn)"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "Phụ phí quãng đường: (distance-10)*2 khi distance > 10",
+    "boundary_values": [
+     "distanceKm = 10",
+     "distanceKm = 10.001/10.01",
+     "distanceKm = 12",
+     "distanceKm lớn (50, 100...) không thành viên, không miễn phí"
+    ],
+    "covered": "partial"
+   },
+   {
+    "behavior": "Giảm 20% cho thành viên áp dụng lên toàn bộ phí (base + phụ phí weight + phụ phí distance)",
+    "boundary_values": [
+     "distance 12 với weight 1 (15.2)",
+     "weight 2.5 với distance 12 (19.2)",
+     "distance 10.01 với weight 2 (12.02 — không phân biệt được với giảm chỉ trên base)"
+    ],
+    "covered": "partial"
+   },
+   {
+    "behavior": "Làm tròn 2 chữ số bằng Math.round(fee*100)/100",
+    "boundary_values": [
+     "15.004 -> 15",
+     "15.005 -> 15.01 (phụ thuộc số thực)",
+     "15.125 -> 15.13",
+     "15.0625 -> 15.06",
+     "15.02, 15.2, 19.2 (kiểm tra bằng toBe)"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "Đầu vào Infinity lan truyền thành Infinity (weight, distance, member)",
+    "boundary_values": [
+     "weightKg = Infinity",
+     "distanceKm = Infinity",
+     "distanceKm = Infinity + thành viên"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "Đầu vào NaN: không ném, so sánh false nên bỏ qua nhánh (hành vi hiện tại, không phải hành vi được thiết kế)",
+    "boundary_values": [
+     "weightKg = NaN",
+     "distanceKm = NaN",
+     "orderTotal = NaN",
+     "weightKg = NaN với thành viên"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "Phụ phí weight và distance cùng lúc / kết hợp với thành viên và không miễn phí với weight lớn khi distance ngoài 10",
+    "boundary_values": [
+     "weight 2.5 distance 12 không thành viên (24)",
+     "weight 2.01 distance 10.01 (20.02)",
+     "weight 2.01 distance 10.01 thành viên (16.02)"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "Orderlines không có trong source: orderTotal âm hoặc 0 (source không validate orderTotal, chỉ so sánh >= 500)",
+    "boundary_values": [
+     "orderTotal = 0",
+     "orderTotal < 0"
+    ],
+    "covered": "no"
+   }
+  ],
+  "criteria": [
+   {
+    "id": "test_vs_implementation",
+    "status": "pass",
+    "evidence": "Toàn bộ test chỉ gọi calculateShippingFee (public API) và assert giá trị trả về hoặc message của lỗi (ví dụ 'C1 ... trả 15 với weightKg = 1, distanceKm = 5' dùng toBe(15)). Không có spy, mock, hay đếm số lần gọi nội bộ. Refactor nội bộ (ví dụ đổi thứ tự cộng phí, tách hàm) không làm test fail nếu kết quả giữ nguyên.",
+    "suggestion": "Không cần thay đổi.",
+    "confidence": "high"
+   },
+   {
+    "id": "equivalence_boundary",
+    "status": "warn",
+    "evidence": "Test được nhóm theo nhánh hành vi (validation, miễn phí, C1-C8 theo lớp weight x distance x thành viên, weight lớn, NaN, Infinity, làm tròn) và bao phủ đầy đủ các biên có trong source: weight 0/0.01/2/2.01, distance -0.001/-0/0/10/10.01, orderTotal 499.99/500. Thiếu/yếu: (1) Nhánh distance > 10 chỉ thử ở 10.01 và 12, chưa có giá trị lớn không thành viên (ví dụ distance=50) để kiểm tra tuyến tính; (2) nhóm 'NaN' ghim hành vi bỏ qua im lặng (describe 'đầu vào NaN (hành vi hiện tại, chưa có nhánh xử lý)'), tức là khóa một hành vi có khả năng là lỗi thay vì phân hoạch rõ ràng; (3) orderTotal âm/0 không được đề cập (source không có nhánh riêng nên mức ưu tiên thấp).",
+    "suggestion": "Thêm case (1, 50, 100, false) -> 95 và (1, 50, 100, true) -> 76 để khóa phụ phí distance lớn. Với NaN, hoặc đổi tên thành 'ghi nhận hành vi hiện tại (NaN không bị validate)' kèm ghi chú, hoặc viết lại theo đúng spec nếu có quyết định nghiệp vụ. Confidence thấp vì phụ thuộc domain.",
+    "confidence": "medium"
+   },
+   {
+    "id": "assertion_strength",
+    "status": "warn",
+    "evidence": "Hầu hết assert dùng toBe với giá trị số cụ thể đã tính tay (ví dụ 'trả 19.2 ((15 + 5 + 4) * 0.8)'), nên mutation thay đổi hệ số, đổi dấu so sánh hoặc bỏ làm tròn đều bị bắt. Đã kiểm tra thủ công: đổi '* 5' thành '* 4' bị bắt bởi 'trả 20 với weightKg = 2.5' (ra 19); đổi '* 2' thành '* 3' bị bắt bởi 'trả 19 với weightKg = 1, distanceKm = 12' (ra 21); đổi '< 0' thành '<= 0' bị bắt bởi test weightKg=0 hoặc distanceKm=0; bỏ Math.round bị bắt bởi 'trả 15.2' và 'trả 19.2'; đổi Math.round thành Math.floor bị bắt bởi 15.13. Điểm yếu: test 'trả 12.02 với distanceKm = 10.01 (giảm 20% áp dụng cho phụ phí quãng đường)' (C4) KHÔNG phân biệt được mutant 'giảm 20% chỉ áp dụng cho base': mutant cho 12 + 0.02 = 12.02, đúng như expected. Tương tự 'trả 16.02' ở C8 cũng không phân biệt được. Chỉ các test khác (C4 '15.2', C8 '19.2') mới bắt được mutant này.",
+    "suggestion": "Sửa test C4 thứ hai thành case có phụ phí distance lớn hơn làm sai lệch rõ ràng, ví dụ calculateShippingFee(1, 20, 499.99, true) -> 28 (35*0.8), mutant cho 12+10=22 (hoặc (1,30,...) để tăng khác biệt). Kiểm tra lại bằng mutation thủ công sau khi sửa.",
+    "confidence": "high"
+   },
+   {
+    "id": "isolation",
+    "status": "pass",
+    "evidence": "Hàm calculateShippingFee là pure function, không có state chia sẻ. Mỗi it() tự truyền đầy đủ tham số inline, không có beforeAll/beforeEach hay biến module-level thay đổi. Thứ tự chạy hoặc it.only không ảnh hưởng kết quả.",
+    "suggestion": "Không cần thay đổi.",
+    "confidence": "high"
+   },
+   {
+    "id": "determinism",
+    "status": "pass",
+    "evidence": "Không dùng Date.now, Math.random hay thời gian thực. Không có async. Các giá trị số được kiểm tra bằng toBe trên kết quả đã làm tròn 2 chữ số nên ổn định. Điểm lưu ý nhỏ: 'trả 15.01 khi phí = 15.005' (10.0025) phụ thuộc biểu diễn IEEE-754. Phân tích thủ công cho thấy vẫn ra 15.01 (kết quả nhân 100 làm tròn về đúng 1500.5), nên kết quả là xác định nhưng dễ vỡ nếu đổi công thức làm tròn. Tôi không chạy được test để xác nhận bằng thực thi (không có công cụ chạy shell/jest).",
+    "suggestion": "Có thể giữ nguyên. Nếu muốn tăng độ bền, ghi chú trong test rằng đây là case nhạy float, hoặc dùng giá trị nhị phân chính xác (ví dụ 10.0625 đã có).",
+    "confidence": "medium"
+   },
+   {
+    "id": "naming_clarity",
+    "status": "warn",
+    "evidence": "Đa số tên mô tả đúng input và kết quả (ví dụ 'ném INVALID_INPUT khi distanceKm âm dù orderTotal >= 500'). Các tên gây hiểu nhầm: (a) 'C4 ... trả 12.02 với distanceKm = 10.01 (giảm 20% áp dụng cho phụ phí quãng đường)' — tên nói đã kiểm chứng giảm 20% trên phụ phí nhưng giá trị không phân biệt được; (b) 'trả 15.02 với distanceKm = 10.01 (biên trên ngưỡng)' và 'trả 20.02 ... (biên dưới cả hai)' gọi 10.01 là 'biên trên' trong khi thực chất là giá trị vừa vượt ngưỡng (biên dưới của miền > 10); (c) 'trả 15 với distanceKm = 10 (biên trên, không vượt ngưỡng)' và 'trả 15 với weightKg = 2 ...' đúng nhưng 'C1' comment mô tả weight ceil(0) đúng. (d) 'làm tròn lên thành 15.13 khi phí = 15.125 (nửa, ...)' ổn.",
+    "suggestion": "Đổi (a) thành tên nêu đúng điều được kiểm: 'trả 12.02 khi distanceKm = 10.01 — kết quả không đủ để phân biệt giảm trên toàn phí với giảm chỉ trên base; xem test 20 km'. Đổi (b) thành 'biên dưới của miền vượt ngưỡng 10'.",
+    "confidence": "high"
+   },
+   {
+    "id": "fake_pass_risk",
+    "status": "warn",
+    "evidence": "Mutation thủ công: (1) đổi 'weightKg <= 0' thành '< 0' -> bị bắt bởi 'weightKg = 0'; (2) đổi 'distanceKm < 0' thành '<= 0' -> bị bắt bởi 'không ném lỗi khi distanceKm = 0'; (3) đổi 'orderTotal >= 500' thành '> 500' -> bị bắt bởi 'trả 0 khi orderTotal = 500'; (4) đổi thứ tự kiểm tra miễn phí trước validation -> bị bắt bởi 'ném INVALID_INPUT khi weightKg = 0 kể cả orderTotal >= 500'; (5) đổi 'Math.ceil' thành 'Math.floor' -> bị bắt bởi 'trả 20 với weightKg = 2.5'; (6) bỏ isMember discount chỉ cho base -> bị bắt bởi 'trả 15.2' và 'trả 19.2' nhưng KHÔNG bởi 'trả 12.02' (C4). (7) đổi '(distanceKm - 10) * 2' thành '(distanceKm - 10)' -> bị bắt bởi 'trả 19 với weightKg = 1, distanceKm = 12'. Các mutant còn sống: 'weightKg > 2' -> '>= 2', 'distanceKm > 10' -> '>= 10' và 'Math.ceil(weightKg - 2)' -> 'Math.ceil(weightKg) - 2' đều tương đương về toán học (đã được ghi chú trong test cho hai mutant đầu). Mutant 'giảm 20% chỉ trên base' vẫn sống ở test C4 thứ hai nhưng bị bắt bởi test khác nên không phải fake pass toàn bộ suite.",
+    "suggestion": "Sửa test C4 thứ hai (xem assertion_strength). Thêm test khóa distanceKm lớn không thành viên (xem equivalence_boundary) để bắt mutant sai hệ số phụ phí distance ở vùng xa hơn. Chạy Stryker hoặc mutation thủ công để xác nhận sau khi sửa.",
+    "confidence": "high"
+   }
+  ],
+  "overall_verdict": "good",
+  "summary": "Bộ test có chất lượng tốt: chỉ dùng public API, pure function nên không có vấn đề isolation hay determinism đáng kể, assert bằng toBe với giá trị đã tính tay và bắt được phần lớn mutant thủ công (đổi toán tử so sánh, hệ số, ceil/floor, bỏ làm tròn, đổi thứ tự validation). Các điểm cần sửa: (1) test C4 'trả 12.02 ... giảm 20% áp dụng cho phụ phí quãng đường' không phân biệt được mutant 'giảm chỉ trên base' vì phụ phí 0.02 bị làm tròn che khuất, tên test cũng nêu kết luận không được kiểm chứng; (2) thiếu case distance lớn không thành viên; (3) nhóm NaN ghim hành vi bỏ qua im lặng, nên ghi rõ đây là hành vi hiện tại; (4) một số tên test gọi 10.01 là 'biên trên'. Lưu ý: tôi không có công cụ chạy test nên các kết luận về mutant và số thực là suy luận thủ công, độ tin cậy trung bình đến cao."
+ },
+ "total_seconds": 358.1,
+ "total_cost_usd": 0.0469
+}

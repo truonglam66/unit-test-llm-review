@@ -1,0 +1,204 @@
+{
+ "derived_behaviors": [
+  {
+   "behavior": "getPeriodNextAction: step 'waiting' → lock_statement disabled + lý do chờ duyệt; step 'locked' → generate_invoice enabled",
+   "boundary_values": [
+    "step=waiting",
+    "step=locked",
+    "step khác"
+   ],
+   "covered": "yes"
+  },
+  {
+   "behavior": "getPeriodNextAction: nhánh fallback dùng row.nextAction (không có/key none/thiếu cả labelKey và label → HIDDEN; ngược lại map đầy đủ field: disabled, labelParams, label, reasonKey, reasonParams)",
+   "boundary_values": [
+    "nextAction undefined",
+    "key='none'",
+    "labelKey='' và label undefined",
+    "labelKey rỗng nhưng label có",
+    "disabled undefined vs true",
+    "labelKey '' → undefined"
+   ],
+   "covered": "partial"
+  },
+  {
+   "behavior": "Phân quyền theo action: ACTION_PERMISSION map (send/lock/void_statement/void_invoice→invoiceUpdate; generate→invoiceCreate; log/allocate→paymentCreate; cancel_allocation/cancel_payment→paymentUpdate; view_invoice/none→luôn cho phép)",
+   "boundary_values": [
+    "mỗi key × quyền true/false",
+    "key không có trong map (view_invoice)"
+   ],
+   "covered": "partial"
+  },
+  {
+   "behavior": "getStatementLockAction: CUSTOMER_APPROVED→enabled; SENT_TO_CUSTOMER→disabled+reason; status khác→hidden; thiếu invoiceUpdate→hidden",
+   "boundary_values": [
+    "CUSTOMER_APPROVED",
+    "SENT_TO_CUSTOMER",
+    "DRAFT/LOCKED/INVOICED/VOID",
+    "invoiceUpdate=false"
+   ],
+   "covered": "partial"
+  },
+  {
+   "behavior": "getStatementSendAction: chỉ DRAFT; thiếu quyền → hidden",
+   "boundary_values": [
+    "DRAFT",
+    "status khác",
+    "invoiceUpdate=false"
+   ],
+   "covered": "partial"
+  },
+  {
+   "behavior": "getStatementVoidAction: VOID→hidden; INVOICED hoặc (invoiceId && invoice.status≠VOID)→disabled kèm invoiceNumber; invoice đã VOID→enabled; không có invoice→''; thiếu quyền→hidden",
+   "boundary_values": [
+    "status=VOID",
+    "status=INVOICED không invoice",
+    "invoiceId có + invoice.status=VOID",
+    "invoiceId có + invoice undefined",
+    "invoiceId rỗng"
+   ],
+   "covered": "partial"
+  },
+  {
+   "behavior": "getInvoiceVoidAction: VOID→hidden; externalInvoiceNo→disabled (ghép series-no, thiếu series chỉ no); PAID hoặc amountPaid>0→disabled; còn lại enabled",
+   "boundary_values": [
+    "amountPaid=0 / '0' / undefined / '1'",
+    "status=PAID với amountPaid=0",
+    "externalInvoiceNo có, series thiếu",
+    "status=VOID",
+    "externalNo ưu tiên hơn paid"
+   ],
+   "covered": "partial"
+  },
+  {
+   "behavior": "getGenerateInvoiceAction: count=0→disabled; count≥1→enabled; thiếu quyền→hidden",
+   "boundary_values": [
+    "0",
+    "1",
+    "2",
+    "invoiceCreate=false"
+   ],
+   "covered": "partial"
+  },
+  {
+   "behavior": "summarizeBulkSend: chỉ tính DRAFT, ép Number cho totalAmount, đếm customer có draft, skipped",
+   "boundary_values": [
+    "rows rỗng",
+    "row không có draft",
+    "row có nhiều draft",
+    "totalAmount null/undefined"
+   ],
+   "covered": "partial"
+  },
+  {
+   "behavior": "runSequentially: tuần tự, lỗi không dừng, progress, message lỗi (error không có message → '')",
+   "boundary_values": [
+    "items rỗng",
+    "throw non-Error / undefined",
+    "không có onProgress"
+   ],
+   "covered": "partial"
+  },
+  {
+   "behavior": "getLoggedPaymentId: id ở root / data.id / undefined",
+   "boundary_values": [
+    "id không phải string",
+    "data undefined",
+    "object rỗng"
+   ],
+   "covered": "partial"
+  },
+  {
+   "behavior": "getPeriodRange: tính start/end tháng từ 'YYYY-MM'",
+   "boundary_values": [
+    "tháng 2 năm nhuận/không nhuận",
+    "tháng 12",
+    "tháng 31 ngày"
+   ],
+   "covered": "no"
+  },
+  {
+   "behavior": "useInvoicePreview: enabled chỉ khi canCreate && customerId && statementIds.length>0; queryKey sort statementIds",
+   "boundary_values": [
+    "customerId rỗng",
+    "statementIds rỗng",
+    "canCreate=false",
+    "thứ tự id khác nhau"
+   ],
+   "covered": "partial"
+  },
+  {
+   "behavior": "useStatementDetail / useActiveContracts: enabled theo statementId/enabled, phân trang qua fetchAllPages",
+   "boundary_values": [
+    "statementId undefined",
+    "enabled=false",
+    "nhiều trang"
+   ],
+   "covered": "no"
+  },
+  {
+   "behavior": "usePeriodActions: mutation gọi đúng API (sendStatements, lockStatement, generateInvoice, voidStatement, voidInvoice, generateStatements, logPayment, cancelPayment, allocatePayment, cancelAllocation), invalidate sau cả khi lỗi (onSettled), progress state + reset",
+   "boundary_values": [
+    "thành công",
+    "thất bại (onSettled)",
+    "sendProgress/generateProgress",
+    "reset*Progress",
+    "generateStatements truyền startDate/endDate"
+   ],
+   "covered": "partial"
+  }
+ ],
+ "criteria": [
+  {
+   "id": "test_vs_implementation",
+   "status": "warn",
+   "confidence": "medium",
+   "evidence": "Phần lớn assert vào output của hàm thuần (đúng public boundary). Nhưng test 'reloads every period query' spy `queryClient.invalidateQueries` và kiểm tra tham số `{ queryKey: [...queryKey] }` — gắn chặt cách cài đặt (Promise.all + invalidateQueries từng key), lại dùng chính `PERIOD_QUERY_KEYS` của source làm expected (circular). Nhiều assert dùng `reasonKey`/`labelKey` raw hoặc `i18next.t(...)` — phụ thuộc i18n được khởi tạo ở đâu đó mà file test này không thấy.",
+   "suggestion": "Với invalidate: seed các query thật vào cache (setQueryData cho từng key) rồi kiểm tra `queryClient.getQueryState(key)?.isInvalidated` sau mutation, và hardcode danh sách key mong đợi. Với i18n, khởi tạo i18n rõ ràng trong setup của test hoặc assert theo key ổn định."
+  },
+  {
+   "id": "equivalence_boundary",
+   "status": "fail",
+   "confidence": "low",
+   "evidence": "Nhiều nhánh/biên của source chưa được test: getPeriodNextAction nhánh fallback (nextAction undefined, key 'none', thiếu cả labelKey và label, map labelParams/label/reasonKey/reasonParams, disabled undefined→false); getStatementLockAction status khác (DRAFT/LOCKED → hidden); getStatementVoidAction với status VOID, invoice đã VOID (→ enabled), invoice thiếu invoiceNumber (→ ''); getInvoiceVoidAction status 'PAID' với amountPaid=0, status VOID, externalInvoiceNo không có series, amountPaid '0'/undefined; getGenerateInvoiceAction chỉ test 0 và 2, không có 1 (biên) và không có VIEW_ONLY; summarizeBulkSend không có rows rỗng/totalAmount null; getPeriodRange hoàn toàn không test (tháng 2 nhuận, 30/31 ngày); useStatementDetail, useActiveContracts không test; 8/10 mutation (sendStatements, generateInvoice, voidStatement, generateStatements, logPayment, cancelPayment, allocatePayment, cancelAllocation) không test; progress state/reset không test; ACTION_PERMISSION: cancel_payment, cancel_allocation, void_*, view_invoice chưa kiểm tra.",
+   "suggestion": "Dùng it.each theo bảng cho từng hàm: (status × permission) cho các action; thêm biên amountPaid = 0 / '0' / '1' / undefined, count = 0/1/2; thêm test getPeriodRange('2024-02') → 2024-02-29, ('2026-02') → 2026-02-28, ('2026-12'); test từng mutation gọi đúng API với đúng tham số (kể cả generateStatements truyền startDate/endDate) và invalidate khi API reject."
+  },
+  {
+   "id": "assertion_strength",
+   "status": "warn",
+   "confidence": "high",
+   "evidence": "Nhiều test chỉ assert `.visible` hoặc `.disabled` (vd `getPeriodNextAction(allocate, ...).visible).toBe(true)`), không kiểm tra key/label — đổi nhầm key hoặc label vẫn pass. `toContain('INV-2026-00001')`, `toContain('hủy phân bổ')` là lỏng. Test 'voids an invoice' và 'sends the chosen due date' chỉ kiểm tra API được gọi, không kiểm tra kết quả/state trả về. `getStatementVoidAction(LOCKED).disabled).toBe(false)` không kiểm tra visible/key. Phần mạnh: `toEqual` ở summarizeBulkSend và runSequentially.",
+   "suggestion": "Dùng `toEqual` cho toàn bộ PeriodActionState (kể cả HIDDEN_ACTION: `{key:'none',visible:false,disabled:false}`) thay vì chỉ một field; assert reasonParams của void statement (`{invoiceNumber:'INV-2026-00001'}`) thay vì toContain trên text i18n."
+  },
+  {
+   "id": "isolation",
+   "status": "warn",
+   "confidence": "medium",
+   "evidence": "Mock `vi.fn().mockResolvedValue({})` ở module-level, không có `beforeEach(vi.clearAllMocks)`/afterEach; chỉ `useInvoicePreview` tự `mockClear()` thủ công. Call history của `statementApi.markAsLocked`/`invoiceApi.cancel` tích lũy giữa các test. Wrapper của useInvoicePreview tạo QueryClient mới mỗi lần wrapper render → có thể tạo client mới khi re-render và refetch.",
+   "suggestion": "Thêm `beforeEach(() => vi.clearAllMocks())` (lưu ý clearAllMocks không reset implementation; dùng mockReset + set lại nếu cần), tạo QueryClient một lần trong factory `createWrapper()` và trả về cùng client."
+  },
+  {
+   "id": "determinism",
+   "status": "pass",
+   "confidence": "medium",
+   "evidence": "Không dùng Date.now/Math.random; ngày cố định '2026-10-14' chỉ là input, không so sánh với hiện tại. Async dùng await/act/waitFor đúng. Phụ thuộc i18next đã được khởi tạo từ ngoài file test (không thấy `i18next.init`/setup) là rủi ro nhỏ về ngôn ngữ.",
+   "suggestion": "Nếu i18n khởi tạo ở setup global thì ghi rõ/khẳng định ngôn ngữ 'vi' trong test để tránh phụ thuộc môi trường."
+  },
+  {
+   "id": "naming_clarity",
+   "status": "warn",
+   "confidence": "high",
+   "evidence": "Đa số tên mô tả hành vi tốt ('disables lock on a statement not yet approved…'). Nhưng một số test gom nhiều hành vi dưới tên chung: 'payment actions need the payment write permissions' (log + allocate), 'void invoice is blocked once money was collected or an e-invoice number exists' (5 assertion, 4 hành vi khác nhau), 'void statement is blocked…' còn assert thêm trường hợp LOCKED enabled; 'reads the id of the payment…' nằm trong describe 'getPeriodNextAction' sai nhóm; 'no action for a row without a next step' (step 'paid').",
+   "suggestion": "Tách mỗi nhánh thành một it riêng (hoặc it.each với tên theo tham số), chuyển getLoggedPaymentId sang describe riêng."
+  },
+  {
+   "id": "fake_pass_risk",
+   "status": "fail",
+   "confidence": "high",
+   "evidence": "Các mutation sống sót: (1) đổi `ACTION_PERMISSION.cancel_payment` thành 'invoiceUpdate', hoặc xóa `view_invoice` handling → không test nào fail. (2) Bỏ nhánh `invoice.status === 'PAID'` ở getInvoiceVoidAction → vẫn pass (chỉ test PARTIALLY_PAID có amountPaid>0). (3) Bỏ `.filter(Boolean)` của externalRef hoặc đổi thứ tự series-no: chỉ có 1 case có cả series. (4) Bỏ điều kiện `status !== VOID` trong hasActiveInvoice → vẫn pass (chỉ có case status INVOICED). (5) Bỏ check `statement.status === VOID` ở getStatementVoidAction → pass. (6) Trong getStatementLockAction, đổi HIDDEN cho status khác thành disabled → pass. (7) Đổi `onSettled` thành `onSuccess` ở bất kỳ mutation nào → pass (lockStatement cũng không test trường hợp reject). (8) Xóa `setSendProgress`/`setGenerateProgress`, hoặc `resetSendProgress` → pass. (9) Sai `getPeriodRange` (vd endOf('month') thành startOf) → pass vì không test. (10) Bỏ `Boolean(customerId)` hoặc `statementIds.length > 0` trong enabled của useInvoicePreview → pass. (11) Đổi cách sort queryKey → pass. (12) `cancelPayment` truyền sai tham số hoặc `generateInvoice` gọi API khác → pass. (13) Đổi điều kiện `=== 0` thành `<= 1` ở getGenerateInvoiceAction: pass vì chỉ test 0 và 2. (14) Đổi `disabled: Boolean(source.disabled)` thành `false` → pass.",
+   "suggestion": "Bổ sung các case ở tiêu chí 2; thêm test cho từng API mutation (kể cả reject → vẫn invalidate); test sendStatements/generateStatements với progress; test getPeriodRange; thêm biên count=1."
+  }
+ ],
+ "overall_verdict": "needs_work",
+ "summary": "Test bao phủ tốt các \"happy path\" chính của các hàm thuần (lock/send/void/bulk send/runSequentially) và hầu hết ổn về tính xác định. Nhưng nhiều nhánh và biên bị bỏ trống, đặc biệt là 8/10 mutation, getPeriodRange, useStatementDetail/useActiveContracts, nhánh fallback của getPeriodNextAction và phần lớn ACTION_PERMISSION. Nhiều assertion chỉ kiểm tra một field (`visible`/`disabled`), và test invalidate dùng chính `PERIOD_QUERY_KEYS` của source (circular) kèm spy vào chi tiết nội bộ. Hệ quả: nhiều mutation đơn giản (đổi quyền, bỏ nhánh PAID/VOID, đổi onSettled thành onSuccess, sai getPeriodRange, đổi ngưỡng count) vẫn pass. Nên chuyển sang bảng it.each theo nhánh/biên, thêm test cho từng mutation (cả khi lỗi), và dọn mock giữa các test."
+}

@@ -1,0 +1,116 @@
+{
+ "derived_behaviors": [
+  {
+   "behavior": "Khởi tạo state: accessToken và refreshToken rỗng",
+   "boundary_values": [
+    "'' / ''"
+   ],
+   "covered": "partial"
+  },
+  {
+   "behavior": "login: gọi authApi.login với payload và merge toàn bộ response vào state (token được lưu)",
+   "boundary_values": [
+    "response có token",
+    "response có field thừa (expiresIn)",
+    "API reject (lỗi) -> state không đổi, lỗi được ném ra"
+   ],
+   "covered": "partial"
+  },
+  {
+   "behavior": "forgotPassword: gọi authApi.forgotPassword và merge response vào state",
+   "boundary_values": [
+    "response có token",
+    "response rỗng/không có field",
+    "API reject"
+   ],
+   "covered": "partial"
+  },
+  {
+   "behavior": "resetPassword: gọi authApi.resetPassword và merge response vào state",
+   "boundary_values": [
+    "response có token mới",
+    "response rỗng",
+    "API reject"
+   ],
+   "covered": "partial"
+  },
+  {
+   "behavior": "logout: gọi reset() -> xoá token",
+   "boundary_values": [
+    "đang có token",
+    "chưa có token (idempotent)"
+   ],
+   "covered": "yes"
+  },
+  {
+   "behavior": "reset: xoá token và cascade reset useAccountStore, useAccessStore, useTabsStore.resetTabs",
+   "boundary_values": [
+    "account có dữ liệu",
+    "access có dữ liệu",
+    "tabs có dữ liệu"
+   ],
+   "covered": "partial"
+  },
+  {
+   "behavior": "persist middleware lưu state vào storage với key 'access-token'",
+   "boundary_values": [
+    "tên key",
+    "dữ liệu persist sau login/reset"
+   ],
+   "covered": "no"
+  }
+ ],
+ "criteria": [
+  {
+   "id": "test_vs_implementation",
+   "status": "warn",
+   "evidence": "Phần lớn assert vào state công khai của store (accessToken, refreshToken), tốt. Nhưng test login/forgot/reset dùng `expect(authApi.xxx).toHaveBeenCalledWith(...)` là kiểm tra tương tác với dependency (chấp nhận được vì là ranh giới ra ngoài). Trong test logout tạo 3 spy (`accountResetSpy`, `accessResetSpy`, `tabsResetSpy`) nhưng không dùng, thể hiện ý định assert chi tiết nội bộ nhưng cuối cùng không có.",
+   "suggestion": "Bỏ các spy thừa. Assert kết quả quan sát được: state của account/access/tabs sau logout đã về giá trị khởi tạo, thay vì spy vào hàm reset.",
+   "confidence": "medium"
+  },
+  {
+   "id": "equivalence_boundary",
+   "status": "fail",
+   "evidence": "Mỗi action chỉ có 1 happy path. Không có case API reject (login/forgotPassword/resetPassword), không có case response rỗng, không có logout khi chưa đăng nhập. Tên test nói 'if response provided' nhưng không test trường hợp không có response.",
+   "suggestion": "Thêm: `login` reject -> promise reject và token vẫn rỗng; `forgotPassword`/`resetPassword` trả `{}`/undefined -> state không bị hỏng; logout khi đã rỗng; reset khi access/tabs có dữ liệu.",
+   "confidence": "medium"
+  },
+  {
+   "id": "assertion_strength",
+   "status": "fail",
+   "evidence": "Test forgotPassword và resetPassword chỉ assert `toHaveBeenCalledWith`, KHÔNG assert state sau khi gọi dù tên test ghi 'updates state'. Test logout: chỉ kiểm account `id` là '' , không kiểm `username`, access hay tabs. Test initialState dùng reset() trong beforeEach nên không chứng minh giá trị khởi tạo thật. Mock response `{success: true}` được merge vào state nhưng không được kiểm.",
+   "suggestion": "Trong forgot/reset mock trả `{accessToken:'x'}` rồi assert `useAuthStore.getState().accessToken === 'x'`. Trong logout assert `useAccountStore.getState()` về initial đầy đủ, `useAccessStore`/`useTabsStore` về initial (đặt dữ liệu trước rồi so sánh sau).",
+   "confidence": "high"
+  },
+  {
+   "id": "isolation",
+   "status": "warn",
+   "evidence": "beforeEach gọi `vi.clearAllMocks()` và `useAuthStore.getState().reset()` (reset cũng reset 3 store khác, tốt). Tuy nhiên: `vi.clearAllMocks` không reset implementation của mockResolvedValue; persist ghi vào storage (localStorage) không được dọn; `vi.spyOn` không được restore (không có restoreAllMocks/afterEach), spy lên `getState()` object có thể rò rỉ sang test khác.",
+   "suggestion": "Thêm `afterEach(() => { vi.restoreAllMocks(); localStorage.clear(); })` và dùng `mockReset`. Bỏ spy hoặc restore sau test.",
+   "confidence": "medium"
+  },
+  {
+   "id": "determinism",
+   "status": "pass",
+   "evidence": "Không dùng Date/Math.random; async đều có await; mock API trả giá trị cố định.",
+   "suggestion": "Không cần đổi. Nếu thêm test persist, nên clear storage để tránh phụ thuộc môi trường.",
+   "confidence": "high"
+  },
+  {
+   "id": "naming_clarity",
+   "status": "warn",
+   "evidence": "Tên 'calls authApi.forgotPassword and updates state if response provided' không khớp nội dung (không check state, không có case 'không có response'). 'clears token and triggers cascade resets...' khẳng định triggers cascade nhưng không assert spy. Nhóm 'forgotPassword and resetPassword' gộp hai hành vi.",
+   "suggestion": "Đổi tên cho đúng nội dung hoặc bổ sung assertion cho khớp, vd 'forgotPassword merges API response into state'. Tách describe riêng cho từng action.",
+   "confidence": "high"
+  },
+  {
+   "id": "fake_pass_risk",
+   "status": "fail",
+   "evidence": "Mutation còn pass: (1) xoá `useAccessStore.getState().reset()` trong reset -> test vẫn pass (spy không được assert, access không được kiểm). (2) xoá `useTabsStore.getState().resetTabs()` -> vẫn pass. (3) bỏ `set({...response})` trong forgotPassword/resetPassword -> vẫn pass vì chỉ kiểm toHaveBeenCalledWith. (4) đổi `logout` thành no-op nhưng không... (logout được kiểm token nên fail) – ok; nhưng đổi key persist 'access-token' -> vẫn pass. (5) bỏ `useAccountStore.reset()` -> fail, đúng, đây là cascade duy nhất được bảo vệ. (6) đổi login thành không merge `refreshToken` -> fail, tốt.",
+   "suggestion": "Assert state của access và tabs sau logout; assert state sau forgotPassword/resetPassword; thêm test rejection và test persist key (kiểm `localStorage.getItem('access-token')`).",
+   "confidence": "high"
+  }
+ ],
+ "overall_verdict": "needs_work",
+ "summary": "Test login và logout kiểm chứng được một phần (token, account.id), nhưng khá lỏng. Ba spy (account/access/tabs) được tạo mà không được assert, nên cascade reset của access và tabs hoàn toàn không được bảo vệ: xoá hai dòng đó test vẫn pass. Test forgotPassword/resetPassword chỉ kiểm lời gọi API, không kiểm state dù tên test nói có. Thiếu hẳn nhánh lỗi (API reject), response rỗng và persist. Cần bổ sung assertion trạng thái thật, dọn mock/storage và sửa tên test cho khớp."
+}

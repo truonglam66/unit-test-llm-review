@@ -1,0 +1,40 @@
+{
+ "testRunner": "jest",
+ "mutate": [
+  "src/eligibility.ts"
+ ],
+ "reporters": [
+  "json"
+ ],
+ "jsonReporter": {
+  "fileName": "runs/exp-haiku-eligibility-naive-r2/mutation.json"
+ },
+ "coverageAnalysis": "perTest",
+ "logLevel": "error",
+ "tempDirName": ".stryker-tmp",
+ "ignorePatterns": [
+  ".venv",
+  "results",
+  "reports",
+  "baseline",
+  "tests",
+  "runs/*",
+  "!runs/exp-haiku-eligibility-naive-r2"
+ ],
+ "jest": {
+  "config": {
+   "testEnvironment": "node",
+   "transform": {
+    "^.+\\.ts$": [
+     "ts-jest",
+     {
+      "diagnostics": false
+     }
+    ]
+   },
+   "testMatch": [
+    "**/runs/exp-haiku-eligibility-naive-r2/eligibility.spec.ts"
+   ]
+  }
+ }
+}

@@ -1,0 +1,278 @@
+{
+ "source": "src/voucher.ts",
+ "model": "haiku",
+ "rounds": [
+  {
+   "round": 1,
+   "jest_pass": true,
+   "mutation_score": 100.0,
+   "killed": 18,
+   "survived": 0,
+   "mutants": 18,
+   "tests": 33,
+   "rubric_pass": 5,
+   "verdict": "needs_work",
+   "cost_usd": 0.0233,
+   "seconds": 179.6
+  }
+ ],
+ "mode": "pipeline",
+ "behaviors": [
+  {
+   "name": "C1 – Ném lỗi khi total âm",
+   "condition": "total < 0. Kiểm tra đầu tiên nên ném lỗi bất kể voucher hay now, kể cả khi voucher đã hết hạn.",
+   "expected": "throw Error('INVALID_TOTAL')",
+   "boundary_values": [
+    "total = -0.01 (sát cạnh 0, phía trong class). Class có 1 cạnh: 0."
+   ]
+  },
+  {
+   "name": "C2 – Voucher hết hạn: giữ nguyên total",
+   "condition": "total >= 0 AND now.getTime() >= expiresAt.getTime()",
+   "expected": "Trả về đúng total. Bỏ qua percent, minOrder, maxDiscount. Mốc hết hạn là inclusive: now == expiresAt vẫn tính là hết hạn.",
+   "boundary_values": [
+    "total = 0 (cạnh total=0, phía trong class)",
+    "now = expiresAt (cạnh thời gian, đúng mốc vẫn hết hạn)"
+   ]
+  },
+  {
+   "name": "C3 – Đơn chưa đạt minOrder: giữ nguyên total",
+   "condition": "total >= 0 AND now < expiresAt AND total < minOrder",
+   "expected": "Trả về total, không giảm. Nếu minOrder = 0 thì nhánh này rỗng. Ví dụ minOrder=100: total=99.99 → 99.99.",
+   "boundary_values": [
+    "total = 0 (cạnh dưới, chỉ tồn tại khi minOrder > 0)",
+    "total = minOrder - 0.01 (cạnh minOrder, ví dụ 99.99 khi minOrder=100)",
+    "now = expiresAt - 1ms (cạnh thời gian, vẫn còn hạn)"
+   ]
+  },
+  {
+   "name": "C4a – Giảm theo phần trăm, chưa chạm trần maxDiscount",
+   "condition": "now < expiresAt AND total >= minOrder AND total*percent/100 <= maxDiscount, tương đương total <= T với T = maxDiscount*100/percent. Ví dụ percent=10, maxDiscount=50, minOrder=100 → T=500.",
+   "expected": "Trả về total - total*percent/100. Ví dụ total=100 → 90; total=500 → 450. Dùng toBeCloseTo vì là số thực. Nếu minOrder > T thì class này rỗng.",
+   "boundary_values": [
+    "total = minOrder (=100, cạnh dưới, bao gồm vì điều kiện bỏ qua là strict <)",
+    "total = T (=500, cạnh trần; min() cho cùng kết quả nên vẫn thuộc class này)",
+    "now = expiresAt - 1ms (cạnh thời gian)"
+   ]
+  },
+  {
+   "name": "C4b – Giảm bị chặn bởi maxDiscount",
+   "condition": "now < expiresAt AND total >= minOrder AND total*percent/100 > maxDiscount, tương đương total > T.",
+   "expected": "Trả về total - maxDiscount. Ví dụ total=500.01 → 450.01; total=1000 → 950. Nếu minOrder > T thì cạnh dưới của class là minOrder thay vì T.",
+   "boundary_values": [
+    "total = T + 0.01 (=500.01, cạnh T)",
+    "now = expiresAt - 1ms (cạnh thời gian)"
+   ]
+  },
+  {
+   "name": "C5 – now không truyền: dùng đồng hồ hệ thống",
+   "condition": "Gọi applyVoucher(total, voucher) không có tham số now, nên now = new Date() tại thời điểm gọi.",
+   "expected": "Kết quả phụ thuộc giờ hệ thống: cùng input nhưng trước và sau expiresAt cho kết quả khác nhau. Test bằng fake timers (vi.useFakeTimers + vi.setSystemTime), không dùng thời gian thật.",
+   "boundary_values": [
+    "system time = expiresAt - 1ms (còn hạn, áp giảm). Class có 1 cạnh: expiresAt."
+   ]
+  },
+  {
+   "name": "C6 – total là NaN (ngoài miền số)",
+   "condition": "total = NaN. Mọi phép so sánh với NaN đều false nên không nhánh nào bị chặn.",
+   "expected": "Không ném lỗi, trả về NaN. Hành vi lọt qua không được validate, nên cần quyết định có nên ném lỗi hay không.",
+   "boundary_values": []
+  },
+  {
+   "name": "C7 – expiresAt là Invalid Date",
+   "condition": "expiresAt.getTime() là NaN, nên now >= NaN là false.",
+   "expected": "Voucher được coi là còn hạn và áp giảm giá bình thường. Có thể không mong muốn, nên cần xác nhận.",
+   "boundary_values": []
+  },
+  {
+   "name": "C8a – percent trong miền hợp lệ [1, 100] (theo comment, không được validate)",
+   "condition": "1 <= percent <= 100. Đây không phải nhánh code, chỉ là miền đầu vào.",
+   "expected": "Không ném lỗi, áp giảm theo công thức bình thường.",
+   "boundary_values": [
+    "percent = 1 (cạnh dưới)",
+    "percent = 100 (cạnh trên). Class có 2 cạnh."
+   ]
+  },
+  {
+   "name": "C8b – percent ngoài miền (≤ 0 hoặc > 100), chưa được validate",
+   "condition": "percent <= 0 hoặc percent > 100. Không có kiểm tra nào trong code.",
+   "expected": "Không ném lỗi. percent = 0 → không giảm. percent > 100 có thể làm kết quả âm: total=500, percent=150, maxDiscount=1000 → discount=750 → trả về -250. Nên thêm validate.",
+   "boundary_values": [
+    "percent = 0 (ngoài miền, sát cạnh 1)",
+    "percent = 101 (ngoài miền, sát cạnh 100). Class có 2 cạnh."
+   ]
+  }
+ ],
+ "stop_reason": "threshold",
+ "final_review": {
+  "derived_behaviors": [
+   {
+    "behavior": "total < 0 ném INVALID_TOTAL, kiểm tra trước expiry và minOrder",
+    "boundary_values": [
+     "-0.01 (ném, còn hạn)",
+     "-100 (ném, đã hết hạn)",
+     "minOrder = 0 với total -0.01 (ném)",
+     "0 (không ném, trả 0)"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "Expiry: now < expiresAt còn hiệu lực; now >= expiresAt coi là hết hạn và giữ nguyên total",
+    "boundary_values": [
+     "expiresAt - 1ms (còn hạn)",
+     "expiresAt (hết hạn, inclusive)",
+     "expiresAt + 1ms (hết hạn)"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "Đơn dưới minOrder giữ nguyên total; đủ minOrder thì được giảm",
+    "boundary_values": [
+     "99.99 với minOrder 100 (không giảm)",
+     "100 = minOrder (giảm 10%)",
+     "0 với minOrder 100",
+     "minOrder = 0 với total 0.5"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "Giảm theo percent: total * percent / 100",
+    "boundary_values": [
+     "200 -> 180",
+     "499.99 -> 449.991 (chưa chạm trần)",
+     "100 = minOrder -> 90"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "Trần maxDiscount: discount = min(raw, maxDiscount)",
+    "boundary_values": [
+     "500 (raw = cap = 50, trả 450)",
+     "500.01 (raw vượt cap, trả 450.01)",
+     "1000 với percent 10 và 50 (bị chặn ở 50)"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "now không truyền: dùng đồng hồ hệ thống (fake timers)",
+    "boundary_values": [
+     "expiresAt - 1ms (áp giảm)",
+     "expiresAt (hết hạn)"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "total = NaN: đi qua và trả NaN, không ném lỗi",
+    "boundary_values": [
+     "NaN còn hạn",
+     "NaN hết hạn"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "expiresAt là Invalid Date: so sánh NaN nên bị coi là còn hạn (fail-open)",
+    "boundary_values": [
+     "Invalid Date với now thường",
+     "Invalid Date với now sau mốc hợp lệ",
+     "Invalid Date với total 1000 (trần)"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "percent trong miền [1,100]: biên dưới và trên",
+    "boundary_values": [
+     "percent = 1 (giảm 1)",
+     "percent = 100 (giảm toàn bộ về 0)"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "percent ngoài miền: không validate, kết quả có thể âm",
+    "boundary_values": [
+     "percent = 0 (không giảm)",
+     "percent = 101 (ra -5)",
+     "percent = 150 (ra -250)"
+    ],
+    "covered": "partial"
+   },
+   {
+    "behavior": "Biên của maxDiscount khi cap <= 0 hoặc âm",
+    "boundary_values": [
+     "maxDiscount = 0",
+     "maxDiscount < 0"
+    ],
+    "covered": "no"
+   },
+   {
+    "behavior": "Giá trị đặc biệt total = Infinity hoặc percent không nguyên (vd 12.5)",
+    "boundary_values": [
+     "total = Infinity",
+     "percent = 12.5"
+    ],
+    "covered": "no"
+   },
+   {
+    "behavior": "Đơn đã hết hạn kết hợp với now không truyền (nhánh hết hạn của default clock chỉ test ở biên, không test sau mốc)",
+    "boundary_values": [
+     "now hệ thống = expiresAt + 1ms"
+    ],
+    "covered": "no"
+   }
+  ],
+  "criteria": [
+   {
+    "id": "test_vs_implementation",
+    "status": "pass",
+    "evidence": "Mọi assertion đều là giá trị trả về hoặc exception ở public API applyVoucher (toBe, toBeCloseTo, toThrow). Không có spy, không đếm lần gọi, không đọc biến nội bộ. Refactor nội bộ (ví dụ đổi thứ tự check hoặc dùng công thức tương đương) không làm test fail.",
+    "suggestion": "Giữ nguyên. Không cần thay đổi.",
+    "confidence": "high"
+   },
+   {
+    "id": "equivalence_boundary",
+    "status": "pass",
+    "evidence": "Test được gom theo nhánh hành vi (C1 throw, C2 expiry, C3 minOrder, C4a/C4b cap, C5 clock, C6 NaN, C7 invalid date, C8 percent). Các biên chính đều có: -0.01/0 (C1), expiresAt -1ms/=/+1ms (C2, C3, C5), 99.99/100 cho minOrder (C3, C4a), 500/500.01 cho trần (C4a, C4b), percent 1/100 và 0/101 (C8a, C8b). Thiếu các lớp có thể thuộc domain: maxDiscount <= 0, total = Infinity, percent không nguyên, và nhánh default clock sau mốc hết hạn.",
+    "suggestion": "Bổ sung ít nhất test maxDiscount = 0 (cap không giảm gì) và total = Infinity nếu domain cho phép. Nếu domain không yêu cầu thì bỏ qua. Mức chắc chắn thấp vì phụ thuộc quy tắc nghiệp vụ.",
+    "confidence": "low"
+   },
+   {
+    "id": "assertion_strength",
+    "status": "warn",
+    "evidence": "Phần lớn assertion dùng toBe với expected hard-code (ví dụ C4a 'toBe(90)', C4b 'toBe(950)'), mutation kiểm tra thủ công đều bị bắt: '<' thành '<=' ở minOrder bị C4a bắt (100 -> 90); '>=' thành '>' ở expiry bị C2 'AT_EXPIRY' bắt; Math.min thành Math.max bị C4a '200 -> 180' bắt; '/100' thành '/10' bị C4a bắt; bỏ Math.min bị C4b bắt. Điểm yếu: C6 (NaN trả NaN), C7 (Invalid Date coi là còn hạn) và C8b ('percent = 101 -> -5', 'percent = 150 -> -250') khẳng định các output mà source comment ghi là 'chưa được validate'. Các assertion này khóa hành vi nghi ngờ là lỗi như thể đó là spec.",
+    "suggestion": "Tách C6, C7, C8b thành describe riêng (ví dụ 'Hành vi chưa được validate – characterization') và đổi tên rõ là 'hiện tại trả X, chưa phải hành vi mong muốn'. Hoặc dùng test.todo / test.failing cho hành vi đúng mong muốn (ném lỗi khi percent ngoài [1,100], ném lỗi khi expiresAt invalid, ném lỗi khi total NaN). Khi team quyết định hành vi, cập nhật assertion tương ứng.",
+    "confidence": "high"
+   },
+   {
+    "id": "isolation",
+    "status": "pass",
+    "evidence": "makeVoucher() tạo object mới mỗi lần gọi và copy Date mới (new Date(EXPIRES_AT.getTime())). Các hằng EXPIRES_AT, NOW, BEFORE/AT/AFTER_EXPIRY là Date không bị mutate trong test. C5 có beforeEach jest.useFakeTimers và afterEach jest.useRealTimers, nên trạng thái timer không rò sang test khác. Các test khác truyền now tường minh, không phụ thuộc thứ tự.",
+    "suggestion": "Không cần sửa. Có thể chuyển hằng Date thành hàm factory nếu muốn chắc chắn tuyệt đối không mutate.",
+    "confidence": "high"
+   },
+   {
+    "id": "determinism",
+    "status": "pass",
+    "evidence": "Mọi test truyền now cố định (NOW, BEFORE_EXPIRY, AT_EXPIRY, AFTER_EXPIRY). Chỉ C5 dùng đồng hồ hệ thống và đã được mock bằng jest.useFakeTimers + jest.setSystemTime. Không có Math.random. Không có async. Không có test nào so sánh với new Date() thật nên không có time bomb trực tiếp (mốc 2026-12-31 là hằng số cố định).",
+    "suggestion": "Không cần sửa.",
+    "confidence": "high"
+   },
+   {
+    "id": "naming_clarity",
+    "status": "warn",
+    "evidence": "Tên test mô tả cụ thể giá trị và kết quả (ví dụ 'total = 99.99 với minOrder = 100 trả về 99.99, không giảm'). Tuy nhiên: 'C4a' có chú thích 'cạnh trần T' nhưng T không được định nghĩa trong file; mã C1..C8 là nhãn không tự mô tả; một số tên như 'expiresAt invalid được coi là còn hạn' và 'percent = 101 ... làm kết quả âm' mô tả hành vi lỗi như thể đó là hành vi chấp nhận được.",
+    "suggestion": "Thay 'cạnh trần T' bằng giá trị cụ thể ('cạnh trần: total = 500 với maxDiscount 50'). Đặt tên describe theo hành vi (ví dụ 'Đơn dưới minOrder giữ nguyên total') thay vì chỉ mã C-. Với các test characterization, ghi rõ là hành vi hiện tại chưa được validate.",
+    "confidence": "medium"
+   },
+   {
+    "id": "fake_pass_risk",
+    "status": "pass",
+    "evidence": "Các mutation thủ công được bắt: (1) bỏ check total<0 -> C1 fail; (2) '<0' thành '<=0' -> 'total = 0 không ném lỗi' fail; (3) '>=' thành '>' ở expiry -> 'AT_EXPIRY' fail; (4) bỏ check expiry -> C2 fail; (5) bỏ check minOrder -> C3 fail; (6) '<' thành '<=' ở minOrder -> C4a 'total = minOrder = 100' fail; (7) Math.min thành Math.max -> C4a fail; (8) bỏ Math.min -> C4b fail; (9) '/100' thành '/10' -> fail; (10) trả discount thay vì total - discount -> fail; (11) đổi so sánh invalid date thành expired -> C7 fail; (12) bỏ default now -> C5 fail. Mutation tương đương không quan sát được: đảo thứ tự check expiry và minOrder (cả hai nhánh đều trả total), không cần test.",
+    "suggestion": "Không có mutation quan trọng sống sót. Nếu muốn chặt hơn, thêm test thứ tự: voucher hết hạn và total < 0 đã có ở C1; có thể thêm mutation kiểm tra total = minOrder - epsilon với percent 100.",
+    "confidence": "high"
+   }
+  ],
+  "overall_verdict": "needs_work",
+  "summary": "Bộ test có chất lượng tốt về mặt kỹ thuật: kiểm tra qua public API, giá trị biên được phủ đầy đủ cho các nhánh chính (throw, expiry -1ms/=/+1ms, minOrder 99.99/100, trần 500/500.01, percent 1/100), không phụ thuộc thời gian thực, không có state dùng chung. Mutation thủ công hầu như đều bị bắt. Vấn đề chính là ba nhóm test (C6 NaN, C7 Invalid Date, C8b percent ngoài miền) đang khóa hành vi mà chính source ghi là chưa validate (ví dụ percent = 101 cho ra số tiền âm -5). Các test này sẽ fail khi team sửa lỗi, và tạo cảm giác rằng hành vi đó đúng. Nên tách thành nhóm characterization hoặc chuyển sang test.todo/test.failing. Một số lớp chưa phủ: maxDiscount <= 0, total = Infinity, percent không nguyên (mức chắc chắn thấp vì phụ thuộc domain)."
+ },
+ "total_seconds": 179.6,
+ "total_cost_usd": 0.0233
+}

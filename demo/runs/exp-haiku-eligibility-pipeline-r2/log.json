@@ -1,0 +1,269 @@
+{
+ "source": "src/eligibility.ts",
+ "model": "haiku",
+ "rounds": [
+  {
+   "round": 1,
+   "jest_pass": true,
+   "mutation_score": 100.0,
+   "killed": 25,
+   "survived": 0,
+   "mutants": 25,
+   "tests": 30,
+   "rubric_pass": 4,
+   "verdict": "good",
+   "cost_usd": 0.0234,
+   "seconds": 141.9
+  }
+ ],
+ "mode": "pipeline",
+ "behaviors": [
+  {
+   "name": "A1 - Tuổi không phải số nguyên (nhánh throw, vế !Number.isInteger)",
+   "condition": "!Number.isInteger(age): age là số thực (17.5), NaN, Infinity, -Infinity, hoặc giá trị không phải number (ví dụ chuỗi '30')",
+   "expected": "throw Error('INVALID_AGE'). Lưu ý: 17.5 phải throw, không trả REJECTED dù 17.5 < 18, vì kiểm tra kiểu chạy trước.",
+   "boundary_values": []
+  },
+  {
+   "name": "A2 - Tuổi là số nguyên âm (nhánh throw, vế age < 0)",
+   "condition": "Number.isInteger(age) && age < 0",
+   "expected": "throw Error('INVALID_AGE'), kể cả khi monthlyIncome hợp lệ (throw ưu tiên hơn kết quả)",
+   "boundary_values": [
+    "-1 (trong lớp, sát cạnh 0): 1 cạnh tại 0"
+   ]
+  },
+  {
+   "name": "B1 - Tuổi dưới 18 (0..17) → REJECTED",
+   "condition": "Number.isInteger(age) && 0 <= age < 18. Gồm cả -0 (Number.isInteger(-0) = true, -0 < 0 = false)",
+   "expected": "REJECTED, không phụ thuộc monthlyIncome, không throw",
+   "boundary_values": [
+    "0 (trong lớp, sát cạnh với A2): cạnh tại 0",
+    "17 (trong lớp, sát cạnh 18): cạnh tại 17|18"
+   ]
+  },
+  {
+   "name": "C1 - Tuổi hợp lệ 18..65 → chuyển sang kiểm tra thu nhập",
+   "condition": "Number.isInteger(age) && 18 <= age <= 65",
+   "expected": "Kết quả phụ thuộc thu nhập: APPROVED khi monthlyIncome >= 8, REJECTED khi monthlyIncome < 8",
+   "boundary_values": [
+    "18 (trong lớp, sát cạnh 17|18)",
+    "65 (trong lớp, sát cạnh 65|66)"
+   ]
+  },
+  {
+   "name": "B2 - Tuổi trên 65 (>= 66) → REJECTED",
+   "condition": "Number.isInteger(age) && age > 65 (đại diện: 150, không có cạnh trên)",
+   "expected": "REJECTED, không phụ thuộc monthlyIncome, không throw",
+   "boundary_values": [
+    "66 (trong lớp, sát cạnh 65|66): 1 cạnh"
+   ]
+  },
+  {
+   "name": "D1 - Thu nhập thấp (< 8) → REJECTED",
+   "condition": "monthlyIncome < 8, chỉ được đánh giá khi age thuộc C1 (18..65). Gồm số âm và 0, ví dụ -5 hoặc -Infinity (code không validate số âm)",
+   "expected": "REJECTED",
+   "boundary_values": [
+    "7.999 (trong lớp, sát cạnh 8): 1 cạnh tại 8"
+   ]
+  },
+  {
+   "name": "D2 - Thu nhập đủ (>= 8) → APPROVED",
+   "condition": "monthlyIncome >= 8, gồm +Infinity. Chỉ đánh giá khi age thuộc C1",
+   "expected": "APPROVED",
+   "boundary_values": [
+    "8 (trong lớp, sát cạnh 8): 1 cạnh tại 8"
+   ]
+  },
+  {
+   "name": "D3 - Thu nhập NaN → APPROVED (nhánh rơi qua)",
+   "condition": "monthlyIncome là NaN. Cả hai so sánh (< 8 và >= 8 không được dùng; code chỉ dùng < 8) đều false, nên rơi xuống return APPROVED. Dù cùng kết quả với D2 nhưng là nhánh logic khác (NaN không thuộc tập >= 8) nên tách thành lớp riêng",
+   "expected": "APPROVED. Đây là hành vi đáng ngờ: thu nhập NaN không được chặn, nên cân nhắc thêm validate và viết test ghi nhận lỗi",
+   "boundary_values": []
+  },
+  {
+   "name": "E1 - Tuổi hợp lệ nhưng ngoài 18..65 bỏ qua thu nhập",
+   "condition": "age thuộc B1 (0..17) hoặc B2 (>= 66), với monthlyIncome bất kỳ kể cả NaN hoặc 100",
+   "expected": "REJECTED. Không có cạnh mới; các cạnh đã tính ở B1 và B2",
+   "boundary_values": []
+  },
+  {
+   "name": "F1 - Phụ thuộc thời gian/ngẫu nhiên",
+   "condition": "Không có. Hàm thuần, không đọc Date, Math.random hay I/O",
+   "expected": "Không cần mock timer hoặc random",
+   "boundary_values": []
+  }
+ ],
+ "stop_reason": "threshold",
+ "final_review": {
+  "derived_behaviors": [
+   {
+    "behavior": "Age không phải số nguyên (17.5, NaN, ±Infinity, chuỗi '30') → throw INVALID_AGE",
+    "boundary_values": [
+     "17.5",
+     "NaN",
+     "Infinity",
+     "-Infinity",
+     "'30'"
+    ],
+    "covered": "partial"
+   },
+   {
+    "behavior": "Age là số nguyên âm → throw INVALID_AGE",
+    "boundary_values": [
+     "-1",
+     "-100"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "Age 0 và -0 (biên dưới hợp lệ) → REJECTED",
+    "boundary_values": [
+     "0",
+     "-0"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "Age 0..17 → REJECTED bất kể thu nhập",
+    "boundary_values": [
+     "0",
+     "10",
+     "17 (sát 18)"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "Age 18..65 → quyết định theo thu nhập; biên dưới/trên 18 và 65",
+    "boundary_values": [
+     "18",
+     "65",
+     "30 (giữa)"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "Age >= 66 → REJECTED bất kể thu nhập",
+    "boundary_values": [
+     "66",
+     "150"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "Thu nhập < 8 → REJECTED (age trong 18..65)",
+    "boundary_values": [
+     "7.999",
+     "0",
+     "-5",
+     "-Infinity"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "Thu nhập >= 8 → APPROVED (age trong 18..65)",
+    "boundary_values": [
+     "8",
+     "100",
+     "+Infinity"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "Thu nhập NaN rơi qua mọi nhánh → APPROVED (hành vi hiện tại, nhiều khả năng là lỗi không được kiểm soát)",
+    "boundary_values": [
+     "NaN với age 18, 30, 65"
+    ],
+    "covered": "yes"
+   },
+   {
+    "behavior": "Ngưỡng thu nhập 8 không phụ thuộc tuổi ở các tuổi giữa khác 30 (ví dụ 40, 50)",
+    "boundary_values": [
+     "age 40 với 7.999/8",
+     "age 50 với 7.999/8"
+    ],
+    "covered": "no"
+   },
+   {
+    "behavior": "Non-integer ở sát biên tuổi (18.5, 65.5, 66.5) → throw, không rơi vào nhánh tuổi",
+    "boundary_values": [
+     "18.5",
+     "65.5",
+     "66.5"
+    ],
+    "covered": "no"
+   },
+   {
+    "behavior": "Số nguyên vượt Number.MAX_SAFE_INTEGER (2^53) vẫn là integer → REJECTED (phân biệt isInteger với isSafeInteger)",
+    "boundary_values": [
+     "2**53",
+     "2**53 + 2"
+    ],
+    "covered": "no"
+   },
+   {
+    "behavior": "Thu nhập kiểu không phải number (ví dụ '5' string) hoặc age undefined/boolean",
+    "boundary_values": [
+     "'5'",
+     "undefined",
+     "true"
+    ],
+    "covered": "no"
+   }
+  ],
+  "criteria": [
+   {
+    "id": "test_vs_implementation",
+    "status": "pass",
+    "evidence": "Toàn bộ test chỉ gọi checkEligibility(...) rồi assert giá trị trả về (toBe('APPROVED'|'REJECTED')) hoặc lỗi ném ra (toThrow('INVALID_AGE')). Không có spy, mock, hay assertion vào nội bộ. Refactor nhánh if (ví dụ gộp điều kiện, đổi thứ tự các nhánh REJECTED) không làm test fail trừ khi đổi hành vi thật. Điểm lưu ý nhỏ: tên test 'age = -0 → REJECTED (Number.isInteger(-0) true, -0 < 0 false)' và D3 đưa lý do implementation vào tên, nhưng assertion vẫn ở public boundary.",
+    "suggestion": "Giữ nguyên cách assert. Có thể bỏ phần giải thích implementation khỏi tên test (chuyển sang comment) để tên chỉ mô tả hành vi.",
+    "confidence": "high"
+   },
+   {
+    "id": "equivalence_boundary",
+    "status": "warn",
+    "evidence": "Các lớp chính đã có biên: 17/18 (B1/C1), 65/66 (C1/B2), 0/-1 (B1/A2), 7.999/8 (D1/D2) và có giá trị giữa (30). Thiếu: (1) non-integer sát biên tuổi như 18.5, 65.5, 66.5 — A1 chỉ có 17.5 nên không phủ phần 'không nguyên' trong các vùng 18..65 và >65; (2) ngưỡng thu nhập chỉ kiểm tra ở age 18, 30, 65, không có tuổi trung gian khác; (3) D3 'thu nhập NaN → APPROVED' khóa một hành vi không rõ là đúng theo domain (test tự ghi 'hành vi hiện tại'), nên đây là characterization test chứ không phải đặc tả; (4) không có case số nguyên ngoài safe range (2**53). Ghi chú: phần đánh giá đúng/sai domain của NaN thu nhập không chắc chắn.",
+    "suggestion": "Thêm test.each cho non-integer sát biên: [18.5, 'INVALID_AGE'], [65.5, 'INVALID_AGE'], [66.5, 'INVALID_AGE']. Thêm ngưỡng 8 ở tuổi khác (40, 50) để khóa tính độc lập tuổi. Với D3, nếu nghiệp vụ muốn NaN bị từ chối thì đổi thành expect REJECTED hoặc throw và ghi rõ trong đặc tả; nếu giữ hành vi hiện tại, gắn comment 'known issue' để người đọc hiểu đây không phải đặc tả. Tùy chọn: thêm age = 2**53 (kiểm tra isSafeInteger vs isInteger).",
+    "confidence": "medium"
+   },
+   {
+    "id": "assertion_strength",
+    "status": "pass",
+    "evidence": "Đã phân tích mutation thủ công (dựa trên đọc code, chưa chạy công cụ mutation): '<18'→'<=18' bị bắt bởi C1 'age = 18 với thu nhập 8 → APPROVED'; '<18'→'<17' bị bắt bởi B1 'age = 17 ... REJECTED'; '>65'→'>=65' bị bắt bởi C1 'age = 65 với thu nhập 8 → APPROVED'; '>65'→'>66' bị bắt bởi 'age = 66 ... REJECTED'; '<8'→'<=8' bị bắt bởi D2 'thu nhập = 8 → APPROVED'; '<8'→'<7' bị bắt bởi D1 '7.999'; bỏ isInteger bị bắt bởi A1 (17.5 → REJECTED thay vì throw, NaN → APPROVED); '<0'→'<=0' bị bắt bởi B1 'age = 0'. Assertion toBe là so sánh chuỗi chính xác, không dùng toBeTruthy/toBeDefined. Điểm yếu nhỏ: toThrow('INVALID_AGE') là so khớp substring của message, nên một lỗi có message 'INVALID_AGE_XYZ' vẫn pass.",
+    "suggestion": "Đổi toThrow('INVALID_AGE') thành toThrow(new Error('INVALID_AGE')) hoặc toThrow(/^INVALID_AGE$/) để so khớp chính xác. Chạy Stryker hoặc mutation tool để xác nhận các mutant đã suy luận ở trên thực sự bị diệt.",
+    "confidence": "medium"
+   },
+   {
+    "id": "isolation",
+    "status": "pass",
+    "evidence": "Mỗi test tự tạo input inline, không có biến module-level có thể thay đổi, không có beforeEach/afterEach, không ghi state. Hàm checkEligibility thuần (không side effect), nên chạy it.only hay đảo thứ tự đều cho cùng kết quả.",
+    "suggestion": "Không cần thay đổi.",
+    "confidence": "high"
+   },
+   {
+    "id": "determinism",
+    "status": "pass",
+    "evidence": "Không dùng Date.now, Math.random, timer, hay async. Không có time bomb (không so với ngày cố định). Mọi input là hằng số, đồng bộ, lặp lại cho cùng kết quả.",
+    "suggestion": "Không cần thay đổi.",
+    "confidence": "high"
+   },
+   {
+    "id": "naming_clarity",
+    "status": "warn",
+    "evidence": "Đa số tên mô tả đúng hành vi (ví dụ 'age = 18 với thu nhập 7.999 → REJECTED', 'age = 66 với thu nhập đủ 8 vẫn REJECTED (kiểm tra tuổi trước thu nhập)'). Vấn đề: (1) Trùng lặp: E1 các hàng [0,100], [17,100], [66,100], [150,100] trùng với B1 'age = 0 ... 100', B1 'age = 17 ... 100', B2 'age = 66 ... 100', B2 'age = 150 ... 100'; C1 'age = 30 với thu nhập 100 → APPROVED' trùng với D2 'thu nhập = 100 → APPROVED'; A2 'age = -1 vẫn throw... thu nhập 100' gần trùng với A2 'age = -1 (sát biên 0)'. (2) Nhãn nhóm A1, A2, B1, C1, B2, D1, D2, D3, E1 không theo thứ tự (B2 đứng sau C1), gây khó đọc. (3) Tên D3 và -0 chứa chi tiết nội bộ 'Number.isInteger(-0)'.",
+    "suggestion": "Gộp E1 vào B1/B2 hoặc xóa các hàng trùng; bỏ test trùng 'age=30 với 100' trong C1. Đánh lại nhãn theo thứ tự đọc (B2 đặt trước C1, hoặc đặt tên nhóm theo lớp tuổi: 'tuổi < 18', 'tuổi 18..65', 'tuổi > 65'). Chuyển lý do implementation sang comment.",
+    "confidence": "high"
+   },
+   {
+    "id": "fake_pass_risk",
+    "status": "warn",
+    "evidence": "Đã kiểm tra các mutant suy luận: hầu hết mutant ngưỡng/nhánh chính đều bị bắt (xem assertion_strength). Mutant còn sống: (a) ngưỡng thu nhập phụ thuộc tuổi, ví dụ thêm 'if (age === 40 && monthlyIncome < 5) return REJECTED' — không có test nào ở age 40. (b) Chỉ kiểm tra isInteger cho tuổi thấp, ví dụ 'if (age < 18 && !Number.isInteger(age)) throw' — 18.5, 65.5, 66.5 không có test nên vẫn pass (17.5 vẫn throw). (c) Đổi Number.isInteger thành Number.isSafeInteger — không có test ở 2**53. (d) Ngược lại, D3 khóa hành vi NaN → APPROVED: nếu sửa lỗi này để từ chối NaN thì D3 fail; điều này không phải fake pass nhưng cho thấy test đang đóng băng một hành vi có thể là lỗi.",
+    "suggestion": "Thêm test cho 18.5, 65.5, 66.5 (non-integer sát biên), thêm age 40/50 với income 7.999 và 8, thêm age = 2**53. Quyết định rõ hành vi NaN income trong đặc tả và điều chỉnh D3 tương ứng.",
+    "confidence": "medium"
+   }
+  ],
+  "overall_verdict": "good",
+  "summary": "Bộ test chất lượng tốt: thuần, độc lập, không flaky, assert chính xác giá trị trả về và lỗi ném ra ở public boundary. Đa số mutation ngưỡng (<18, >65, <8, <0, bỏ isInteger) đều bị bắt. Điểm cần cải thiện: (1) thiếu non-integer sát biên tuổi (18.5, 65.5, 66.5) và ngưỡng thu nhập ở tuổi khác 18/30/65 — các mutant tương ứng còn sống; (2) D3 khóa hành vi NaN thu nhập → APPROVED có thể là lỗi; (3) E1 và một số case C1/D2 trùng lặp; nhãn nhóm không theo thứ tự; (4) toThrow dùng so khớp substring. Phân tích mutation là suy luận từ đọc code, chưa chạy công cụ mutation."
+ },
+ "total_seconds": 141.9,
+ "total_cost_usd": 0.0234
+}
